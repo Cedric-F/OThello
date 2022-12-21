@@ -1,7 +1,9 @@
+Compile and run server :
+```
+gcc src/server.c -o dst/srv -lpthread && ./dst/srv
+```
 
-Commande de compilation :
-gcc -Wall -o othello_GUI othello_GUI.c $(pkg-config --cflags --libs gtk+-3.0)
-
-Lancement projet avec <num_port> le port TCP d'écoute :
-./othello_GUI <num_port>
-
+Compile and run client :
+```
+gcc src/othello_GUI.c -o dst/othello_GUI -Wall $(pkg-config --cflags --libs gtk+-3.0) && ./dst/othello_GUI <PORT>
+```

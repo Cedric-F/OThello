@@ -20,7 +20,10 @@
 #define CYN "\e[0;36m"
 #define WHT "\e[0;37m"
 
-int createServer(struct sockaddr_in server){
+void send_list(int clients[], int nb, char * aliases[], char * output);
+int send_message(int socket, char * message, size_t len, int flags);
+
+int create_server(struct sockaddr_in server){
   server.sin_family = AF_INET;
   server.sin_addr.s_addr = htonl(INADDR_ANY);
   server.sin_port = htons(8000);
@@ -48,6 +51,13 @@ int createServer(struct sockaddr_in server){
   return sS;
 }
 
+int send_message(int socket, char * message, size_t len, int flags)
+{
+  int n = send(socket, message, len, flags);
+  printf(">> %ld bytes : %s\n", len, message);
+  return n;
+}
+
 int main(int argc, char * argv[])
 {
   char * aliases[10];
@@ -56,8 +66,8 @@ int main(int argc, char * argv[])
   int clients[10], max = 10, activity, val, sd, max_sd;
   fd_set readfds;
 
-  char input[1025];
-  char output[1025];
+  char input[257];
+  char output[257];
   int * size;
   int i = 0;
   int sockfd;
@@ -67,7 +77,7 @@ int main(int argc, char * argv[])
 
   memset(&server, 0, sizeof(server));
 
-  sockfd = createServer(server);
+  sockfd = create_server(server);
 
   for (i = 0; i < max; i++)
   {
@@ -127,7 +137,7 @@ int main(int argc, char * argv[])
 
       if (FD_ISSET(sd, &readfds))
       {
-        if ((val = read(sd, input, 1024)) == 0)
+        if ((val = read(sd, input, 256)) == 0)
         {
           getpeername(sd, (struct sockaddr *) &server, (socklen_t *) &serverSize);
           printf("%sOutgoing connection:\n%s", YEL, WHT);
@@ -139,6 +149,7 @@ int main(int argc, char * argv[])
           close(sd);
           clients[i] = 0;
           memset(aliases[i], 0, 24);
+          send_list(clients, max, aliases, output);
         } else
         {
           printf("%s<< %d bytes : %s%s\n%s", CYN, val, GRN, input, WHT);
@@ -151,10 +162,8 @@ int main(int argc, char * argv[])
             if (!strlen(aliases[i]))
             {
               memset(output, 0, sizeof output);
-              strcat(output, YEL);
               strcat(output, "Please sign in using the NAME command.\nType HELP for more info.\n");
-              strcat(output, WHT);
-              send(sd, output, strlen(output), 0);
+              send_message(sd, output, strlen(output), 0);
             }
             else
             {
@@ -173,51 +182,66 @@ int main(int argc, char * argv[])
                     if (strcmp(dest, aliases[j]) == 0)
                     {
                       memset(output, 0, sizeof output);
-                      strcat(output, CYN);
                       strcat(output, aliases[i]);
-                      strcat(output, YEL);
                       strcat(output, " sent you:\n");
-                      strcat(output, GRN);
                       strcat(output, token);
-                      strcat(output, WHT);
-                      n = send(clients[j], output, strlen(output), 0);
+                      n = send_message(clients[j], output, strlen(output), 0);
                       break;
                     }
                   }
                   if (n == 0)
                   {
                     memset(output, 0, sizeof output);
-                    strcat(output, YEL);
                     strcat(output, "User not found.\n");
-                    strcat(output, WHT);
-                    send(sd, output, strlen(output), 0);
+                    send_message(sd, output, strlen(output), 0);
                   }
                 }
               }
             }
           }
-          else if (strcmp(token, "LIST") == 0)
+          else if (strcmp(token, "NAME") == 0)
           {
-            memset(output, 0, sizeof output);
-            strcat(output, YEL);
-            strcat(output, "Connected users:\n");
-            for (int j = 0; j < max; j++)
+            //printf("name registration\n");
+            int n;
+            int match_found = 0;
+            int j = -1;
+            char buffer[sizeof(int) * 2];
+            token = strtok(NULL, " \n\0");
+            //printf("entering verification loop\n");
+            for (j = 0; j < max; j++)
             {
-              if (strlen(aliases[j]))
+              //printf("%s is being checked against %s\n", aliases[j], token);
+              if (strcmp(aliases[j], token) == 0)
               {
-                strcat(output, "- ");
-                strcat(output, CYN);
-                strcat(output, aliases[j]);
-                strcat(output, YEL);
-                if (j < max - 1)
-                {
-                  strcat(output, " ");
-                }
+                //printf("Match already in use !\n");
+                memset(output, 0, sizeof output);
+                strcat(output, "Username already in use. New username : ");
+                strcat(output, token);
+                strcat(output, "-");
+                sprintf(buffer, "%d", j);
+                strcat(output, buffer);
                 strcat(output, "\n");
+                //n = send_message(sd, output, strlen(output), 0);
+                match_found = 1;
+                break;
               }
-              strcat(output, WHT);
+              //printf("Not a match, keep looking\n");
             }
-            send(sd, output, sizeof output, 0);
+            //printf("Registered okay\n");
+            strcpy(aliases[i], token);
+            if (match_found == 1)
+            {
+              strcat(aliases[i], "-");
+              strcat(aliases[i], buffer);
+              memset(buffer, 0, sizeof buffer);
+            }
+            printf("New nickname set for socket %d : %s\n", i, aliases[i]);
+            memset(output, 0, sizeof output);
+            strcat(output, "Successfully registered with the username ");
+            strcat(output, aliases[i]);
+            strcat(output, "\n\0");
+            //n = send_message(sd, output, strlen(output), 0);
+            send_list(clients, max, aliases, output);
           }
 
           memset(input, 0, sizeof input);
@@ -230,4 +254,30 @@ int main(int argc, char * argv[])
   close(sockfd);
 
   return EXIT_SUCCESS;
+}
+
+void send_list(int clients[], int nb, char * aliases[], char * output)
+{
+  int n;
+  for (int i = 0; i < nb; i++)
+  {
+    if (clients[i])
+    {
+      memset(output, 0, sizeof output);
+      strcat(output, "Connected users:\n");
+      for (int j = 0; j < nb; j++)
+      {
+        if (strlen(aliases[j]) && i != j)
+        {
+          strcat(output, aliases[j]);
+          if (j < nb - 1)
+          {
+            strcat(output, "\n");
+          }
+        }
+      }
+      strcat(output, "\r\n");
+      send_message(clients[i], output, strlen(output), 0);
+    }
+  }
 }

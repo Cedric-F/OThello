@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,16 +14,20 @@
 #include <signal.h>
 #include <sys/signalfd.h>
 
-
 #include <gtk/gtk.h>
 
 
 #define MAXDATASIZE 256
 
+int startsWith( const char * theString, const char * theBase ) {
+  return strncmp( theString, theBase, strlen( theBase ) ) == 0;
+}
 
 /* Variables globales */
   int damier[8][8];	// tableau associe au damier
   int couleur;		// 0 : pour noir, 1 : pour blanc
+
+  pthread_t read_thread;
   
   int port;		// numero port passé lors de l'appel
 
@@ -49,6 +52,41 @@
   GError      *  p_err       = NULL;
    
 
+
+void signup(char * login);
+void get_users(char message[]);
+
+// Thread de lecture
+void * t_read(void * sock)
+{
+    char message[MAXDATASIZE] = {0};
+    char * buffer;
+    char delim[17] = "Connected users:\n";
+    ssize_t size;
+    int sockfd = *((int *) sock);
+    while(1)
+    {
+      buffer = (char *) malloc(MAXDATASIZE * sizeof(char));
+      //buffer = (char *) realloc(buffer, MAXDATASIZE * sizeof(char));
+      size = read(sockfd, buffer, MAXDATASIZE);
+      if (!size)
+      {
+        printf("\rLost connection to server...\n");
+        exit(EXIT_FAILURE);
+      }
+      if (size >= 1)
+      {
+        printf("\r<< [%ld bytes] %s\n", size, buffer);
+        fflush(stdout);
+        if (startsWith(buffer, delim))
+        {
+          get_users(buffer);
+        }
+      }
+      free(buffer);
+    }
+    pthread_exit(EXIT_SUCCESS);
+}
 
 // Entetes des fonctions  
   
@@ -122,7 +160,7 @@ void init_interface_jeu(void);
 void reset_liste_joueurs(void);
 
 /* Fonction permettant d'ajouter un joueur dans la liste des joueurs sur l'interface graphique */
-void affich_joueur(char *login, char *adresse, char *port);
+void affich_joueur(char *login);
 
 
 
@@ -321,6 +359,7 @@ static void clique_connect_serveur(GtkWidget *b)
   char * login = lecture_login();
 
   if (strlen(login) < 1) return;
+
   printf("Connection button triggered\n");
 
   if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -344,9 +383,47 @@ static void clique_connect_serveur(GtkWidget *b)
   printf("Connected !\n");
   disable_server_connect();
 
-  printf(lecture_login());
+  pthread_create(&read_thread, NULL, t_read, (void *) &sockfd);
+
+  signup(login);
 
   return;
+}
+
+void signup(char * login)
+{
+  int n;
+  char message[5 + strlen(login)];
+  strcat(message, "NAME ");
+  strcat(message, login);
+  n = send(sockfd, message, sizeof(message), 0);
+  printf("\r>> [%d bytes] : %s\n", n, message);
+}
+
+void get_users(char * message)
+{
+  char * token;
+  token = strtok(message, "\n");
+  printf("%s\n\n", token);
+  do
+  {
+    token = strtok(NULL, "\n");
+    if (token != NULL)
+    {
+      affich_joueur(token);
+    }
+    //printf("%s\n", token);
+    //if (token != NULL) affich_joueur(token);
+  } while (token != NULL);
+  /*printf("\r====\n%s\n", message);
+  char * token;
+  token = strtok(message, "\n");
+  while (strlen(token))
+  {
+    if (strlen(token)) affich_joueur(token);
+    token = strtok(NULL, "\n");
+    printf("test\n");
+  }*/
 }
 
 /* Fonction desactivant bouton demarrer partie */
@@ -450,11 +527,11 @@ void reset_liste_joueurs(void)
 }
 
 /* Fonction permettant d'ajouter un joueur dans la liste des joueurs sur l'interface graphique */
-void affich_joueur(char *login, char *adresse, char *port)
+void affich_joueur(char *login)
 {
   const gchar *joueur;
   
-  joueur=g_strconcat(login, " - ", adresse, " : ", port, "\n", NULL);
+  joueur=g_strconcat(login, "\n", NULL);
   
   gtk_text_buffer_insert_at_cursor(GTK_TEXT_BUFFER(gtk_text_view_get_buffer(GTK_TEXT_VIEW(gtk_builder_get_object(p_builder, "textview_joueurs")))), joueur, strlen(joueur));
 }
@@ -554,81 +631,82 @@ static void * f_com_socket(void *p_arg)
 
 int main (int argc, char ** argv)
 {
-   int i, j, ret;
+  int i, j, ret;
 
-   if(argc!=2)
-   {
-     printf("\nPrototype : ./othello num_port\n\n");
-     
-     exit(1);
-   }
+  if(argc!=2)
+  {
+    printf("\nPrototype : ./othello num_port\n\n");
+
+    exit(1);
+  }
    
    
-   /* Initialisation de GTK+ */
-   gtk_init (& argc, & argv);
+  /* Initialisation de GTK+ */
+  gtk_init (& argc, & argv);
    
-   /* Creation d'un nouveau GtkBuilder */
-   p_builder = gtk_builder_new();
+  /* Creation d'un nouveau GtkBuilder */
+  p_builder = gtk_builder_new();
  
-   if (p_builder != NULL)
-   {
-      /* Chargement du XML dans p_builder */
-      gtk_builder_add_from_file (p_builder, "UI_Glade/Othello.glade", & p_err);
+  if (p_builder != NULL)
+  {
+    /* Chargement du XML dans p_builder */
+    gtk_builder_add_from_file (p_builder, "UI_Glade/Othello.glade", & p_err);
  
-      if (p_err == NULL)
+    if (p_err == NULL)
+    {
+      /* Recuparation d'un pointeur sur la fenetre. */
+      GtkWidget * p_win = (GtkWidget *) gtk_builder_get_object (p_builder, "window1");
+
+ 
+      /* Gestion evenement clic pour chacune des cases du damier */
+
+      char * id = (char *) malloc(sizeof(char) * 11);
+      for (int i = 0; i < 8; i++)
       {
-         /* Recuparation d'un pointeur sur la fenetre. */
-         GtkWidget * p_win = (GtkWidget *) gtk_builder_get_object (p_builder, "window1");
+        for (int j = 0; j < 8; j++)
+        {
+          sprintf(id, "eventbox%c%d", (char) (65 + j), j);
+           g_signal_connect(gtk_builder_get_object(p_builder, id), "button_press_event", G_CALLBACK(coup_joueur), NULL);
+        }
+      }
+      free(id);
+      /* Gestion clic boutons interface */
+      g_signal_connect(gtk_builder_get_object(p_builder, "button_connect"), "clicked", G_CALLBACK(clique_connect_serveur), NULL);
+      g_signal_connect(gtk_builder_get_object(p_builder, "button_start"), "clicked", G_CALLBACK(clique_connect_adversaire), NULL);
 
- 
-         /* Gestion evenement clic pour chacune des cases du damier */
-
-         char * id = (char *) malloc(sizeof(char) * 11);
-         for (int i = 0; i < 8; i++) {
-           for (int j = 0; j < 8; j++) {
-             sprintf(id, "eventbox%c%d", (char) (65 + j), j);
-             g_signal_connect(gtk_builder_get_object(p_builder, id), "button_press_event", G_CALLBACK(coup_joueur), NULL);
-           }
-         }
-         free(id);
-         /* Gestion clic boutons interface */
-         g_signal_connect(gtk_builder_get_object(p_builder, "button_connect"), "clicked", G_CALLBACK(clique_connect_serveur), NULL);
-         g_signal_connect(gtk_builder_get_object(p_builder, "button_start"), "clicked", G_CALLBACK(clique_connect_adversaire), NULL);
-         
-         /* Gestion clic bouton fermeture fenetre */
-         g_signal_connect_swapped(G_OBJECT(p_win), "destroy", G_CALLBACK(gtk_main_quit), NULL);
+      /* Gestion clic bouton fermeture fenetre */
+      g_signal_connect_swapped(G_OBJECT(p_win), "destroy", G_CALLBACK(gtk_main_quit), NULL);
          
          
          
-         /* Recuperation numero port donne en parametre */
-         port=atoi(argv[1]);
+      /* Recuperation numero port donne en parametre */
+      port=atoi(argv[1]);
           
-         /* Initialisation du damier de jeu */
-         for(i=0; i<8; i++)
-         {
-           for(j=0; j<8; j++)
-           {
-             damier[i][j]=-1; 
-           }  
-         }
+      /* Initialisation du damier de jeu */
+      for(i=0; i<8; i++)
+      {
+        for(j=0; j<8; j++)
+        {
+          damier[i][j]=-1; 
+        }  
+      }
 
      
-         /***** TO DO *****/
-         
-         // Initialisation socket et autres objets, et création thread pour communications avec joueur adverse
+      /***** TO DO *****/
        
-	 
-         gtk_widget_show_all(p_win);
-         gtk_main();
-      }
-      else
-      {
-         /* Affichage du message d'erreur de GTK+ */
-         g_error ("%s", p_err->message);
-         g_error_free (p_err);
-      }
-   }
+      // Initialisation socket et autres objets, et création thread pour communications avec joueur adverse
+     
  
+      gtk_widget_show_all(p_win);
+      gtk_main();
+    }
+    else
+    {
+      /* Affichage du message d'erreur de GTK+ */
+      g_error ("%s", p_err->message);
+      g_error_free (p_err);
+    }
+  }
  
-   return EXIT_SUCCESS;
+  return EXIT_SUCCESS;
 }
