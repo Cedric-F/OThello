@@ -258,6 +258,11 @@ int main(int argc, char * argv[])
 
 void send_list(int clients[], int nb, char * aliases[], char * output)
 {
+  struct sockaddr_in addr;
+  socklen_t addr_size = sizeof(struct sockaddr_in);
+  char address[20];
+  char port[10];
+  int res;
   int n;
   for (int i = 0; i < nb; i++)
   {
@@ -267,16 +272,22 @@ void send_list(int clients[], int nb, char * aliases[], char * output)
       strcat(output, "Connected users:\n");
       for (int j = 0; j < nb; j++)
       {
-        if (strlen(aliases[j]) && i != j)
+        if (strlen(aliases[j]) > 0 && i != j)
         {
+          memset(address, 0, sizeof(address));
+          res = getpeername(clients[j], (struct sockaddr *) &addr, &addr_size);
+          sprintf(address, "%s", inet_ntoa(addr.sin_addr));
+          sprintf(port, "%d", addr.sin_port);
           strcat(output, aliases[j]);
-          if (j < nb - 1)
-          {
-            strcat(output, "\n");
-          }
+          strcat(output, "[");
+          strcat(output, address);
+          strcat(output, ":");
+          strcat(output, port);
+          strcat(output, "]");
+          strcat(output, "\n");
         }
       }
-      strcat(output, "\r\n");
+      strcat(output, "\0");
       send_message(clients[i], output, strlen(output), 0);
     }
   }

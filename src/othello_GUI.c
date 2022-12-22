@@ -59,31 +59,33 @@ void get_users(char message[]);
 // Thread de lecture
 void * t_read(void * sock)
 {
-    char message[MAXDATASIZE] = {0};
-    char * buffer;
+    char buffer[MAXDATASIZE];
     char delim[17] = "Connected users:\n";
     ssize_t size;
     int sockfd = *((int *) sock);
     while(1)
     {
-      buffer = (char *) malloc(MAXDATASIZE * sizeof(char));
-      //buffer = (char *) realloc(buffer, MAXDATASIZE * sizeof(char));
+      memset(buffer, 0, sizeof(buffer));
       size = read(sockfd, buffer, MAXDATASIZE);
-      if (!size)
+      if (size == 0)
       {
-        printf("\rLost connection to server...\n");
-        exit(EXIT_FAILURE);
+        printf("\nLost connection to server...\n");
+        pthread_exit(EXIT_FAILURE);
       }
-      if (size >= 1)
+      else if (size >= 1)
       {
-        printf("\r<< [%ld bytes] %s\n", size, buffer);
         fflush(stdout);
+        printf("\n<< [%ld bytes] %s\n", size, buffer);
         if (startsWith(buffer, delim))
         {
           get_users(buffer);
         }
       }
-      free(buffer);
+      else if (size < 0)
+      {
+        printf("Some erreur with read\n");
+        pthread_exit(EXIT_FAILURE);
+      }
     }
     pthread_exit(EXIT_SUCCESS);
 }
@@ -397,33 +399,22 @@ void signup(char * login)
   strcat(message, "NAME ");
   strcat(message, login);
   n = send(sockfd, message, sizeof(message), 0);
-  printf("\r>> [%d bytes] : %s\n", n, message);
+  printf("\n>> [%d bytes] : %s\n", n, message);
 }
 
 void get_users(char * message)
 {
+  reset_liste_joueurs();
   char * token;
   token = strtok(message, "\n");
-  printf("%s\n\n", token);
   do
   {
     token = strtok(NULL, "\n");
-    if (token != NULL)
+    if (token != NULL && strlen(token) >= 1)
     {
       affich_joueur(token);
     }
-    //printf("%s\n", token);
-    //if (token != NULL) affich_joueur(token);
   } while (token != NULL);
-  /*printf("\r====\n%s\n", message);
-  char * token;
-  token = strtok(message, "\n");
-  while (strlen(token))
-  {
-    if (strlen(token)) affich_joueur(token);
-    token = strtok(NULL, "\n");
-    printf("test\n");
-  }*/
 }
 
 /* Fonction desactivant bouton demarrer partie */
@@ -707,6 +698,8 @@ int main (int argc, char ** argv)
       g_error_free (p_err);
     }
   }
+
+  pthread_join(&t_read, NULL);
  
   return EXIT_SUCCESS;
 }
