@@ -1606,7 +1606,7 @@
                         <property name="height_request">30</property>
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Adresse :</property>
+                        <property name="label" translatable="yes">Address :</property>
                         <property name="justify">right</property>
                         <property name="single_line_mode">True</property>
                       </object>
@@ -1714,7 +1714,7 @@
                   <object class="GtkLabel" id="label17">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">&lt;b&gt;Connexion au serveur joueurs&lt;/b&gt;</property>
+                    <property name="label" translatable="yes">&lt;b&gt;Server info&lt;/b&gt;</property>
                     <property name="use_markup">True</property>
                   </object>
                 </child>
@@ -1781,7 +1781,7 @@
                                 <property name="height_request">20</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">Adresse :</property>
+                                <property name="label" translatable="yes">Target :</property>
                                 <property name="justify">right</property>
                                 <property name="single_line_mode">True</property>
                               </object>
@@ -1806,7 +1806,7 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkEntry" id="entry_addr_j2">
+                              <object class="GtkEntry" id="entry_target_name">
                                 <property name="width_request">158</property>
                                 <property name="height_request">23</property>
                                 <property name="visible">True</property>
@@ -1814,7 +1814,7 @@
                                 <property name="max_length">15</property>
                                 <property name="invisible_char">●</property>
                                 <property name="width_chars">15</property>
-                                <property name="text" translatable="yes">127.0.0.1</property>
+                                <property name="text" translatable="yes">username</property>
                               </object>
                               <packing>
                                 <property name="x">78</property>
@@ -1837,7 +1837,7 @@
                             </child>
                             <child>
                               <object class="GtkButton" id="button_start">
-                                <property name="label" translatable="yes">Démarrer partie</property>
+                                <property name="label" translatable="yes">Start a game</property>
                                 <property name="use_action_appearance">False</property>
                                 <property name="width_request">119</property>
                                 <property name="height_request">31</property>
@@ -1864,7 +1864,7 @@
                   <object class="GtkLabel" id="label18">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">&lt;b&gt;Joueurs&lt;/b&gt;</property>
+                    <property name="label" translatable="yes">&lt;b&gt;Players&lt;/b&gt;</property>
                     <property name="use_markup">True</property>
                   </object>
                 </child>
@@ -1919,7 +1919,7 @@
                             <property name="height_request">30</property>
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Joueur 1</property>
+                            <property name="label" translatable="yes">Player 1</property>
                             <property name="justify">right</property>
                             <property name="single_line_mode">True</property>
                           </object>
@@ -1934,7 +1934,7 @@
                             <property name="height_request">30</property>
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Joueur 2</property>
+                            <property name="label" translatable="yes">Player 2</property>
                             <property name="single_line_mode">True</property>
                           </object>
                           <packing>
@@ -1981,7 +1981,7 @@
                   <object class="GtkLabel" id="label19">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">&lt;b&gt;Partie&lt;/b&gt;</property>
+                    <property name="label" translatable="yes">&lt;b&gt;Game stats&lt;/b&gt;</property>
                     <property name="use_markup">True</property>
                   </object>
                 </child>

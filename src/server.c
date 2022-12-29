@@ -20,8 +20,25 @@
 #define CYN "\e[0;36m"
 #define WHT "\e[0;37m"
 
+typedef struct Game Game;
+
+struct Game {
+  int id;
+  int p1_fd;
+  int p2_fd;
+  char p1[10];
+  char p2[10];
+  int turn;
+  int grid[8][8];
+};
+
 void send_list(int clients[], int nb, char * aliases[], char * output);
 int send_message(int socket, char * message, size_t len, int flags);
+void get_sock_info(int socket, char * address, char * port);
+int get_sockid_from_alias(char * alias, char * aliases[], int nb);
+int get_game_index(Game games[], int id, int max);
+void print_game(Game * game);
+void init_game_grid(Game * game);
 
 int create_server(struct sockaddr_in server){
   server.sin_family = AF_INET;
@@ -54,12 +71,15 @@ int create_server(struct sockaddr_in server){
 int send_message(int socket, char * message, size_t len, int flags)
 {
   int n = send(socket, message, len, flags);
-  printf(">> %ld bytes : %s\n", len, message);
+  printf("(%d) >> %ld bytes : %s\n", socket, len, message);
   return n;
 }
 
 int main(int argc, char * argv[])
 {
+  int game_count = 0;
+  int max_games = 5;
+  Game games[max_games];
   char * aliases[10];
   char * token;
   char dest[24];
@@ -78,6 +98,11 @@ int main(int argc, char * argv[])
   memset(&server, 0, sizeof(server));
 
   sockfd = create_server(server);
+
+  for (i = 0; i < max_games; i++)
+  {
+    games[i].id = -1;
+  }
 
   for (i = 0; i < max; i++)
   {
@@ -137,7 +162,7 @@ int main(int argc, char * argv[])
 
       if (FD_ISSET(sd, &readfds))
       {
-        if ((val = read(sd, input, 256)) == 0)
+        if ((val = read(sd, input, 256)) == 0) // no read (lost connection)
         {
           getpeername(sd, (struct sockaddr *) &server, (socklen_t *) &serverSize);
           printf("%sOutgoing connection:\n%s", YEL, WHT);
@@ -150,58 +175,13 @@ int main(int argc, char * argv[])
           clients[i] = 0;
           memset(aliases[i], 0, 24);
           send_list(clients, max, aliases, output);
-        } else
+        }
+        else // got a message
         {
-          printf("%s<< %d bytes : %s%s\n%s", CYN, val, GRN, input, WHT);
-
-
-          token = strtok(input, " \n");
-          //printf("%d\n", strcmp(token, "SEND"));
-          if (strcmp(token, "SEND") == 0)
+          printf("(%d) %s<< %d bytes : %s%s\n%s", sd, CYN, val, GRN, input, WHT);
+          token = strtok(input, ": \n");
+          if (strcmp(token, "NAME") == 0) // registered an alias name for the socket
           {
-            if (!strlen(aliases[i]))
-            {
-              memset(output, 0, sizeof output);
-              strcat(output, "Please sign in using the NAME command.\nType HELP for more info.\n");
-              send_message(sd, output, strlen(output), 0);
-            }
-            else
-            {
-              token = strtok(NULL, " \n");
-              printf("%s\n", token);
-              if (token != NULL)
-              {
-                strcpy(dest, token);
-                token = strtok(NULL, "\0");
-                if (token != NULL)
-                {
-                  printf("%s %s\n", dest, token);
-                  int n = 0;
-                  for (int j = 0; j < max; j++)
-                  {
-                    if (strcmp(dest, aliases[j]) == 0)
-                    {
-                      memset(output, 0, sizeof output);
-                      strcat(output, aliases[i]);
-                      strcat(output, " sent you:\n");
-                      strcat(output, token);
-                      n = send_message(clients[j], output, strlen(output), 0);
-                      break;
-                    }
-                  }
-                  if (n == 0)
-                  {
-                    memset(output, 0, sizeof output);
-                    strcat(output, "User not found.\n");
-                    send_message(sd, output, strlen(output), 0);
-                  }
-                }
-              }
-            }
-          }
-          else if (strcmp(token, "NAME") == 0)
-          {
-            //printf("name registration\n");
             int n;
             int match_found = 0;
             int j = -1;
@@ -243,8 +223,157 @@ int main(int argc, char * argv[])
             //n = send_message(sd, output, strlen(output), 0);
             send_list(clients, max, aliases, output);
           }
+          else if (strcmp(token, "GAME") == 0) // Game command
+          {
+            printf("GAME command\n");
+            token = strtok(NULL, ": \n");
+            printf("%s\n", token);
+            if (strcmp(token, "NEW") == 0) // new game request
+            { // In case of a new game
+              printf("creating new game\n");
+              Game game;
+              printf("Game structure ok\n");
+              char * j1;
+              char * j2;
+              printf("token %s\n", token);
+              
+              j1 = strtok(NULL, ":"); // Get player 1
+              if (j1 != NULL) sprintf(game.p1, "%s", j1);
+              j2 = strtok(NULL, ":"); // Get player 2
+              if (j2 != NULL) sprintf(game.p1, "%s", j1);
 
-          memset(input, 0, sizeof input);
+              printf("check if players exist\n");
+
+              int p_exist = 0;
+              if (j1 != NULL && j2 != NULL) // If both players names are provided
+              {
+                int p1_fd_exists = 0;
+                int p2_fd_exists = 0;
+                for (int i = 0; i < max; i++) // iterate on the aliases list
+                {
+                  if (p1_fd_exists == 0)
+                    p1_fd_exists = strcmp(j1, aliases[i]) == 0; // check if p1_fd exists
+                  if (p2_fd_exists == 0)
+                    p2_fd_exists = strcmp(j2, aliases[i]) == 0; // check if p2_fd exists
+                  if (p_exist = (p1_fd_exists && p2_fd_exists)) break; // break if 2 matches found
+                }
+              }
+              if (p_exist) // if players exist
+              {
+                printf("Players exist !\n");
+                if (game_count < max_games) // check the allowed game count
+                {
+                  int already_in_game = 0;
+                  for (int i = 0; i < max_games; i++) // for each game
+                  { // make sure that none of the 2 players are already playing
+                    already_in_game = strcmp(j1, games[i].p1) == 0 || strcmp(j1, games[i].p2) == 0 ||
+                                      strcmp(j2, games[i].p1) == 0 || strcmp(j2, games[i].p2) == 0;
+                    if (already_in_game != 0) // if a game already exists then break
+                    {
+                      printf("One of the players is already in a game!\n");
+                      break;
+                    }
+                  }
+                  if (already_in_game == 0) // players are not already busy
+                  {
+                    int game_id = -1;
+                    int new = 0;
+                    for (int i = 0; i < max_games; i++) // get first game that is not in play
+                    {
+                      if (games[i].id == -1) { // game is found
+                        game_id = i;
+                        new = 1;
+                        printf("Available game is found at %d!\n", i);
+                        break;
+                      }
+                    }
+                    if (new)
+                    {
+                      printf("Creating new game\n");
+                      int n;
+                      game = games[game_id];
+                      game.id = game_id; // create a new game
+                      game.p1_fd = clients[get_sockid_from_alias(j1, aliases, max)];
+                      game.p2_fd = clients[get_sockid_from_alias(j2, aliases, max)];
+                      sprintf(game.p1, "%s", j1);
+                      sprintf(game.p2, "%s", j2);
+                      init_game_grid(&game);
+                      game.grid[3][3] = (int) game.p2_fd;
+                      game.grid[4][4] = (int) game.p2_fd;
+                      game.grid[4][3] = (int) game.p1_fd;
+                      game.grid[3][4] = (int) game.p1_fd;
+                      print_game(&game);
+                      memset(output, 0, sizeof output);
+                      sprintf(output, "GAME:NEW:%d:0:PLAY", game_id);
+                      strcat(output, "\0");
+                      n = send_message(game.p1_fd, output, strlen(output), 0); // send game creation ok to players
+                      if (n > 0) {
+                        memset(output, 0, sizeof output);
+                        sprintf(output, "GAME:NEW:%d:1:WAIT", game_id);
+                        strcat(output, "\0");
+                        n = send_message(game.p2_fd, output, strlen(output), 0); // send game creation ok to players
+                      }
+                      games[game_id] = game;
+                    }
+                  }
+                }
+              }
+            }
+            else if (token != NULL)
+            {
+              int game_id = (int) strtol(token, NULL, 10);
+              printf("Game %s\n", token);
+              game_id = get_game_index(games, game_id, max_games);
+              if (game_id != -1) {
+                printf("Game found\n");
+                Game game = games[game_id];
+                print_game(&game);
+                int joueur;
+                int col, row;
+                char * tk;
+                token = strtok(NULL, ":");
+                if (strcmp(token, "MOVE") == 0)
+                {
+                  int n;
+                  token = strtok(NULL, ":");
+                  int joueur = (int) strtol(token, NULL, 10);
+                  token = strtok(NULL, "\0");
+
+                  tk = strtok(token, "-");
+                  row = (int) strtol(tk, NULL, 10);
+                  tk = strtok(NULL, "\0");
+                  col = (int) strtol(tk, NULL, 10);
+
+                  printf("Player %d played %d-%d\n", (joueur), col, row);
+                  game.grid[row][col] = !joueur ? (int) game.p1_fd : (int) game.p2_fd;
+                  print_game(&game);
+                  games[game_id] = game;
+                  if (!joueur)
+                  {
+                    memset(output, 0, sizeof output);
+                    sprintf(output, "GAME:MOVE:%d:%d-%d:WAIT", joueur, col, row);
+                    strcat(output, "\0");
+                    n = send_message(game.p1_fd, output, strlen(output), 0);
+                    memset(output, 0, sizeof output);
+                    sprintf(output, "GAME:MOVE:%d:%d-%d:PLAY", joueur, col, row);
+                    strcat(output, "\0");
+                    n = send_message(game.p2_fd, output, strlen(output), 0);
+                  }
+                  else
+                  {
+                    memset(output, 0, sizeof output);
+                    sprintf(output, "GAME:MOVE:%d:%d-%d:PLAY", joueur, col, row);
+                    strcat(output, "\0");
+                    n = send_message(game.p1_fd, output, strlen(output), 0);
+                    memset(output, 0, sizeof output);
+                    sprintf(output, "GAME:MOVE:%d:%d-%d:WAIT", joueur, col, row);
+                    strcat(output, "\0");
+                    n = send_message(game.p2_fd, output, strlen(output), 0);
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -256,12 +385,29 @@ int main(int argc, char * argv[])
   return EXIT_SUCCESS;
 }
 
-void send_list(int clients[], int nb, char * aliases[], char * output)
+int get_sockid_from_alias(char * alias, char * aliases[], int nb)
+{
+  for (int i = 0; i < nb; i++)
+  {
+    if (strcmp(alias, aliases[i]) == 0)
+    {
+      return i;
+    }
+  }
+  return -1;
+}
+
+void get_sock_info(int socket, char * address, char * port)
 {
   struct sockaddr_in addr;
   socklen_t addr_size = sizeof(struct sockaddr_in);
-  char address[20];
-  char port[10];
+  int res = getpeername(socket, (struct sockaddr *) &addr, &addr_size);
+  sprintf(address, "%s:", inet_ntoa(addr.sin_addr));
+  sprintf(port, "%d", addr.sin_port);
+}
+
+void send_list(int clients[], int nb, char * aliases[], char * output)
+{
   int res;
   int n;
   for (int i = 0; i < nb; i++)
@@ -274,16 +420,7 @@ void send_list(int clients[], int nb, char * aliases[], char * output)
       {
         if (strlen(aliases[j]) > 0 && i != j)
         {
-          memset(address, 0, sizeof(address));
-          res = getpeername(clients[j], (struct sockaddr *) &addr, &addr_size);
-          sprintf(address, "%s", inet_ntoa(addr.sin_addr));
-          sprintf(port, "%d", addr.sin_port);
           strcat(output, aliases[j]);
-          strcat(output, "[");
-          strcat(output, address);
-          strcat(output, ":");
-          strcat(output, port);
-          strcat(output, "]");
           strcat(output, "\n");
         }
       }
@@ -292,3 +429,50 @@ void send_list(int clients[], int nb, char * aliases[], char * output)
     }
   }
 }
+
+int get_game_index(Game games[], int id, int max)
+{
+  for (int i = 0; i < max; i++)
+  {
+    print_game(&(games[i]));
+    if (games[i].id == id) return i;
+  }
+  return -1;
+}
+
+void init_game_grid(Game * game)
+{
+  for (int i = 0; i < 8; i++)
+  {
+    for (int j = 0; j < 8; j++)
+    {
+      game->grid[i][j] = 0;
+    }
+  }
+  print_game(game);
+}
+
+void print_game(Game * game)
+{
+  printf("Game ID : %d\n", game->id);
+  printf("Player 1 : %s [%d]\n", game->p1 , game->p1_fd);
+  printf("Player 2 : %s [%d]\n", game->p2 , game->p2_fd);
+  for (int i = 0; i < 8; i++)
+  {
+    for (int j = 0; j < 8; j++)
+    {
+      printf("%d ", game->grid[i][j]);
+    }
+    printf("\n");
+  }
+}
+
+
+/*
+Jx << GAME:NEW:J1:J2 Receive new game request
+   JX >> GAME:NEW:ID:COLOR Sends the game info to both players
+Jx << GAME:ID:MOVE:COLOR:COORD Receive a move
+   JX >> GAME:MOVE:COLOR:COORD Sends the result to both players
+   Jx >> GAME:WIN
+   Jx >> GAME:LOST
+*/
