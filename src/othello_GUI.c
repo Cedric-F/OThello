@@ -184,19 +184,7 @@ void * t_read(void * state)
                   *(st->play) = 1;
                 }
               }
-            }/*
-            else if (token != NULL && strcmp(token, "END") == 0)
-            {
-              int score_black = get_score_J1();
-              int score_white = get_score_J2();
-
-              int winner = score_white > score_black ? 1 : score_white == score_black ? -1 : 0;
-
-              if (winner == couleur)
-                affiche_fenetre_fin("Fin de partie.\n\nVous avez gagné!");
-              else
-                affiche_fenetre_fin("Fin de partie.\n\nVous avez perdu!");
-            }*/
+            }
             else if (token != NULL && strcmp(token, "WON") == 0)
             {
               *(st->play) = 0;
@@ -472,9 +460,8 @@ void signup(char * login)
 {
   int n;
   char message[5 + strlen(login)];
-  strcat(message, "NAME ");
+  strcat(message, "NAME:");
   strcat(message, login);
-  strcat(message, "\0");
   n = send(sockfd, message, strlen(message), 0);
   printf("\n>> [%d bytes] : %s\n", n, message);
 }
