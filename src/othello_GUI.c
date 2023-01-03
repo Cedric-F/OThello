@@ -340,21 +340,12 @@ static void player_move(GtkWidget *p_case)
   if (*(state->play) == 0) return;
 
   int col, lig, n;
-  char buf[MAXDATASIZE] = "";
   char msg[MAXDATASIZE] = "";
 
   // Traduction coordonnees damier en indexes matrice damier
   coord_to_indexes(gtk_buildable_get_name(GTK_BUILDABLE(gtk_bin_get_child(GTK_BIN(p_case)))), &col, &lig);
 
-  sprintf(buf, "GAME:%d:MOVE:", game_id);
-  sprintf(msg, "%s", buf);
-  sprintf(buf, "%d:", couleur);
-  strcat(msg, buf);
-  sprintf(buf, "%d-", lig);
-  strcat(msg, buf);
-  sprintf(buf, "%d", col);
-  strcat(msg, buf);
-  strcat(msg, "\0");
+  sprintf(msg, "GAME:%d:MOVE:%d:%d-%d", game_id, couleur, lig, col);
 
   n = send(*(state->sockfd), msg, strlen(msg), 0);
   printf(">> [%d bytes] : %s\n", n, msg);

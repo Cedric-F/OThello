@@ -259,10 +259,11 @@ void parse_name(int socket, int i)
     sprintf(output, "Username already in use. New username : %s", aliases[i]);
     memset(buffer, 0, sizeof buffer);
   }
+  else
+  {}
+  sprintf(output, "Successfully registered with the username %s", aliases[i]);
   printf("New nickname set for socket %d : %s\n", i, aliases[i]);
   
-  strcat(output, "Successfully registered with the username ");
-  strcat(output, aliases[i]);
   send_output(socket);
 }
 
@@ -322,10 +323,8 @@ void parse_new_game(Game * game)
       init_game_grid(game);
       
       sprintf(output, "GAME:NEW:%d:%d:PLAY", game_id, BLACK);
-      strcat(output, "\0");
       send_output(game->p1_fd); // send game creation ok to players
       sprintf(output, "GAME:NEW:%d:%d:WAIT", game_id, WHITE);
-      strcat(output, "\0");
       send_output(game->p2_fd); // send game creation ok to players
       games[game_id] = *game;
     } else printf("No game available\n");
@@ -363,19 +362,15 @@ void parse_game_move(int id)
       if (!player) // p1 just moved
       { // if p2 can't move but p1 still can, send PLAY to p1 and WAIT to p2 otherwise switch turn
         sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p2_move && p1_move ? "PLAY" : "WAIT"));
-        strcat(output, "\0");
         send_output(game.p1_fd);
         sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p2_move && p1_move ? "WAIT" : "PLAY"));
-        strcat(output, "\0");
         send_output(game.p2_fd);
       }
       else // p2 just moved
       { // 
         sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p1_move && p2_move ? "WAIT" : "PLAY"));
-        strcat(output, "\0");
         send_output(game.p1_fd);
         sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p1_move && p2_move ? "PLAY" : "WAIT"));
-        strcat(output, "\0");
         send_output(game.p2_fd);
       }
 
@@ -434,7 +429,6 @@ void send_list()
           strcat(output, "\n");
         }
       }
-      strcat(output, "\0");
       send_output(clients[i]);
     }
   }
@@ -592,15 +586,12 @@ int can_play(Game game, int player)
   for (int i = 0; i < 8; i++)
     for (int j = 0; j < 8; j++)
       moves += (!game.grid[i][j] && valid_move(game, i, j, player));
-  printf("Player n°%d can play %d moves\n", player, moves);
   return !!moves;
 }
 
 int end(Game * game)
 {
-  printf("End start\n");
   print_game(game);
-  printf("End stop\n");
   return (!can_play(*game, game->p1_fd) && !can_play(*game, game->p2_fd));
 }
 
@@ -631,12 +622,10 @@ void send_result(Game * game)
 
   if (winner)
   {
-    strcat(output, "GAME:WON");
-    strcat(output, "\0");
+    sprintf(output, "GAME:WON");
     send_output(winner);
   }
-  strcat(output, "GAME:LOST");
-  strcat(output, "\0");
+  sprintf(output, "GAME:LOST");
   if (draw == 1)
   {
     send_output(game->p1_fd);
