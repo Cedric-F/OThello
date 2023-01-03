@@ -95,7 +95,7 @@ int create_server(struct sockaddr_in server){
 
 int send_output(int socket)
 {
-  int n = send(socket, output, strlen(output), 0);
+  int n = send(socket, output, sizeof(output), 0);
   printf("(%d) >> %ld bytes : %s\n", socket, strlen(output), output);
   memset(output, 0, sizeof(output));
 
@@ -202,9 +202,7 @@ int main(int argc, char * argv[])
         {
           printf("(%d) %s<< %d bytes : %s%s\n%s", sd, CYN, val, GRN, input, WHT);
 
-          printf("before parsing\n");
           token = strtok(input, ": \n");
-          printf("token %s\n", token);
           if (strcmp(token, "NAME") == 0) // registered an alias name for the socket
           {
             parse_name(sd, i);
@@ -296,7 +294,6 @@ void parse_new_game(Game * game)
     int already_in_game = 0;
     for (int i = 0; i < MAX_GAMES; i++) // for each game
     { // make sure that none of the 2 players are already playing
-      print_game(&games[i]);
       already_in_game = strcmp(j1, games[i].p1) == 0 || strcmp(j1, games[i].p2) == 0 ||
                         strcmp(j2, games[i].p1) == 0 || strcmp(j2, games[i].p2) == 0;
       if (already_in_game) // if a game already exists then break
@@ -361,29 +358,28 @@ void parse_game_move(int id)
       memset(buffer, 0, sizeof(buffer));
       move(&game, row, col, player, buffer);
       games[game_id] = game;
-      if (!player)
-      {
-        int p1_move = !can_play(game, game.p2_fd);
-        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (p1_move ? "PLAY" : "WAIT"));
+      int p1_move = can_play(game, game.p1_fd);
+      int p2_move = can_play(game, game.p2_fd);
+      if (!player) // p1 just moved
+      { // if p2 can't move but p1 still can, send PLAY to p1 and WAIT to p2 otherwise switch turn
+        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p2_move && p1_move ? "PLAY" : "WAIT"));
         strcat(output, "\0");
         send_output(game.p1_fd);
-        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (p1_move ? "WAIT" : "PLAY"));
+        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p2_move && p1_move ? "WAIT" : "PLAY"));
         strcat(output, "\0");
         send_output(game.p2_fd);
       }
-      else
-      {
-        int p2_move = !can_play(game, game.p1_fd);
-        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (p2_move ? "WAIT" : "PLAY"));
+      else // p2 just moved
+      { // 
+        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p1_move && p2_move ? "WAIT" : "PLAY"));
         strcat(output, "\0");
         send_output(game.p1_fd);
-        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (p2_move ? "PLAY" : "WAIT"));
+        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p1_move && p2_move ? "PLAY" : "WAIT"));
         strcat(output, "\0");
         send_output(game.p2_fd);
       }
 
       finished = end(&game);
-      printf("after end %d\n", finished);
       if (finished)
       {
         send_result(&game);
@@ -395,7 +391,6 @@ void parse_game_move(int id)
     } else {
       printf("not a valid move\n");
     }
-    printf("After play\n");
   } else printf("No game found\n");
   free(buffer);
 }

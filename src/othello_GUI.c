@@ -160,12 +160,10 @@ void * t_read(void * state)
               {
                 if (strcmp(token, "PLAY") && strcmp(token, "WAIT")) // token is coords
                 {
-                  char a[2];
-                  char b[2];
-                  strncpy(a, token, 1);
-                  a[2] = '\0';
-                  strncpy(b, token+2, 1);
-                  b[2] = '\0';
+                  char * a;
+                  char * b;
+                  a = strsep(&token, "-");
+                  b = strsep(&token, "\0");
                   int col, lig;
                   col = (int) strtol(a, NULL, 10);
                   lig = (int) strtol(b, NULL, 10);
@@ -281,7 +279,6 @@ void indexes_to_coord(int col, int lig, char *coord)
   c=(char) (65 + col);
     
   sprintf(coord, "%c%d", c, lig+1);
-  strcat(coord, "\0");
 }
 
 /* Fonction permettant de changer l'image d'une case du damier (indiqué par sa colonne et sa ligne) */
@@ -322,7 +319,6 @@ void set_score_J1(int score)
   
   s=malloc(5*sizeof(char));
   sprintf(s, "%d", score);
-  strcat(s, "\0");
   
   gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_ScoreJ1")), s);
 }
@@ -334,7 +330,6 @@ void set_score_J2(int score)
   
   s=malloc(5*sizeof(char));
   sprintf(s, "%d", score);
-  strcat(s, "\0");
   
   gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_ScoreJ2")), s);
 }
@@ -345,8 +340,8 @@ static void player_move(GtkWidget *p_case)
   if (*(state->play) == 0) return;
 
   int col, lig, n;
-  char buf[MAXDATASIZE];
-  char msg[MAXDATASIZE];
+  char buf[MAXDATASIZE] = "";
+  char msg[MAXDATASIZE] = "";
 
   // Traduction coordonnees damier en indexes matrice damier
   coord_to_indexes(gtk_buildable_get_name(GTK_BUILDABLE(gtk_bin_get_child(GTK_BIN(p_case)))), &col, &lig);
@@ -460,8 +455,7 @@ void signup(char * login)
 {
   int n;
   char message[5 + strlen(login)];
-  strcat(message, "NAME:");
-  strcat(message, login);
+  sprintf(message, "NAME:%s", login);
   n = send(sockfd, message, strlen(message), 0);
   printf("\n>> [%d bytes] : %s\n", n, message);
 }
@@ -509,9 +503,7 @@ static void start_game(GtkWidget *b)
     // Recuperation  adresse et port adversaire au format chaines caracteres
     target_name=read_target();
   
-    sprintf(message, "GAME:NEW:%s:", login);
-    strcat(message, target_name);
-    strcat(message, "\0");
+    sprintf(message, "GAME:NEW:%s:%s", login, target_name);
     n = send(sockfd, message, sizeof(message), 0);
     printf("\n>> [%d bytes] : %s\n", n, message);
   }
