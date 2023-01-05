@@ -17,12 +17,13 @@
 
 #include <gtk/gtk.h>
 #include <glib.h>
+#include <X11/Xlib.h>
 
 /*
 ============ THREAD SAFE INTERFACE UPDATE FUNCTION ============
 */
 
-void disable_button_start(gpointer data);
+gboolean disable_button_start(gpointer data);
 gboolean init_game_interface(gpointer data);
 gboolean update_white_label(gpointer data);
 gboolean update_black_label(gpointer data);
@@ -85,7 +86,7 @@ void reset_liste_joueurs(void);
 void affich_joueur_buffer(char *login);
 
 /* Fonction affichant boite de dialogue si partie gagnee */
-void affiche_fenetre_fin(char * message);
+gboolean affiche_fenetre_fin(gpointer data);
 
 /* Fonction permettant de changer l'image d'une case du damier (indiqué par sa colonne et sa ligne) */
 void change_img_case(int col, int lig, int couleur_j);
@@ -148,13 +149,12 @@ void * t_read(void * state)
   ssize_t size; // input size
 
   char * token; // will hold the commands tokens
-  
-  // the window's context
-  GtkWidget * p_win = (GtkWidget *) gtk_builder_get_object (p_builder, "window1");
 
   // window titles
   char * wait = g_strdup("Wait for your turn");
   char * play = g_strdup("Your turn to play");
+  char * won_message = g_strdup("Fin de la partie.\n\nVous avez gagné!");
+  char * lost_message = g_strdup("Fin de la partie.\n\nVous avez perdu!");
 
   while(1)
   {
@@ -287,13 +287,15 @@ void * t_read(void * state)
             else if (token != NULL && strcmp(token, "WON") == 0)
             {
               *(st->play) = 0;
-              affiche_fenetre_fin("Fin de la partie.\n\nVous avez gagné !");
+              //affiche_fenetre_fin("Fin de la partie.\n\nVous avez gagné !");
+              g_main_context_invoke(main_context, (GSourceFunc) affiche_fenetre_fin, won_message);
             }
             // Game ends with the losing message
             else if (token != NULL && strcmp(token, "LOST") == 0)
             {
               *(st->play) = 0;
-              affiche_fenetre_fin("Fin de la partie.\n\nVous avez perdu !");
+              //affiche_fenetre_fin("Fin de la partie.\n\nVous avez perdu !");
+              g_main_context_invoke(main_context, (GSourceFunc) affiche_fenetre_fin, lost_message);
             }
           }
         }
@@ -531,13 +533,15 @@ char *read_target(void)
 }
 
 /* Fonction affichant boite de dialogue si partie gagnee */
-void affiche_fenetre_fin(char * message)
+gboolean affiche_fenetre_fin(gpointer data)
 {
+  char * message = (char *) data;
   GtkDialogFlags flags = GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT;
   GtkWidget * dialog = gtk_message_dialog_new(NULL, flags, GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE, "%s", message);
   gtk_dialog_run(GTK_DIALOG (dialog));
   
   gtk_widget_destroy(dialog);
+  return FALSE;
 }
 
 /* Fonction appelee lors du clique du bouton Se connecter */
@@ -615,10 +619,11 @@ void disable_server_connect(void)
 }
 
 /* Fonction desactivant bouton demarrer partie */
-void disable_button_start(gpointer data)
+gboolean disable_button_start(gpointer data)
 {
   GtkBuilder * p_builder = (GtkBuilder *) data;
   gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "button_start"), FALSE);
+  return FALSE;
 }
 
 /* Fonction traitement signal bouton Demarrer partie */
@@ -772,6 +777,7 @@ int main (int argc, char ** argv)
   int i, j;
 
   state = (State *) malloc(sizeof(State));   
+  XInitThreads();
    
   /* Initialisation de GTK+ */
   gtk_init (& argc, & argv);
