@@ -52,6 +52,7 @@ void parse_game_move();
 
 void send_list();
 int send_output(int socket);
+int send_output_no_clear(int socket);
 void get_sock_info(int socket, char * address, char * port);
 int get_sockid_from_alias(char * alias);
 int get_game_index(int id);
@@ -62,7 +63,6 @@ int is_in_grid(int row, int col);
 int valid_move(Game game, int row, int col, int player);
 void move(Game * game, int row, int col, int player, char * captured_pieces);
 int can_play(Game game, int player);
-int end(Game * game);
 void send_result(Game * game);
 
 int create_server(struct sockaddr_in server){
@@ -98,6 +98,15 @@ int send_output(int socket)
   int n = send(socket, output, sizeof(output), 0);
   printf("(%d) >> %ld bytes : %s\n", socket, strlen(output), output);
   memset(output, 0, sizeof(output));
+
+  return n;
+}
+
+
+int send_output_no_clear(int socket)
+{
+  int n = send(socket, output, sizeof(output), 0);
+  printf("(%d) >> %ld bytes : %s\n", socket, strlen(output), output);
 
   return n;
 }
@@ -357,31 +366,67 @@ void parse_game_move(int id)
       memset(buffer, 0, sizeof(buffer));
       move(&game, row, col, player, buffer);
       games[game_id] = game;
-      int p1_move = can_play(game, game.p1_fd);
-      int p2_move = can_play(game, game.p2_fd);
-      if (!player) // p1 just moved
-      { // if p2 can't move but p1 still can, send PLAY to p1 and WAIT to p2 otherwise switch turn
-        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p2_move && p1_move ? "PLAY" : "WAIT"));
-        send_output(game.p1_fd);
-        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p2_move && p1_move ? "WAIT" : "PLAY"));
-        send_output(game.p2_fd);
-      }
-      else // p2 just moved
-      { // 
-        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p1_move && p2_move ? "WAIT" : "PLAY"));
-        send_output(game.p1_fd);
-        sprintf(output, "GAME:MOVE:%d:%s:%s", player, buffer, (!p1_move && p2_move ? "PLAY" : "WAIT"));
-        send_output(game.p2_fd);
-      }
-
-      finished = end(&game);
-      if (finished)
+      int p1_move = can_play(game, 0);
+      int p2_move = can_play(game, 1);
+      if (player == 0) // p1 just moved
       {
-        send_result(&game);
+        printf("Player 1 moved\n");
+        if (p2_move) // can p2 move ?
+        {
+          printf("Player 2 can move\n");
+          sprintf(output, "GAME:MOVE:%d:%s:WAIT", player, buffer);
+          send_output(game.p1_fd);
+          sprintf(output, "GAME:MOVE:%d:%s:PLAY", player, buffer);
+          send_output(game.p2_fd);
+        }
+        else if (p1_move) // can p1 move again ?
+        {
+          printf("Player 2 can't move but player 1 can. Change nothing to the players status\n");
+          sprintf(output, "GAME:MOVE:%d:%s:PLAY", player, buffer);
+          send_output(game.p1_fd);
+          sprintf(output, "GAME:MOVE:%d:%s:WAIT", player, buffer);
+          send_output(game.p2_fd);
+        }
+        else // no one can move
+        {
+          sprintf(output, "GAME:MOVE:%d:%s:WAIT", player, buffer);
+          send_output(game.p1_fd);
+          sprintf(output, "GAME:MOVE:%d:%s:WAIT", player, buffer);
+          send_output(game.p2_fd);
+          printf("Neither can move. Endgame\n");
+          send_result(&game);
+          memset(&game, 0, sizeof(game));
+        }
       }
-      else if (finished == 0)
+      else if (player == 1) // p2 just moved and p1 can play
       {
-        memset(&game, 0, sizeof(game));
+        printf("Player 2 just moved\n");
+        if (p1_move) // can p1 move ?
+        {
+          printf("Player 1 can move\n");
+          sprintf(output, "GAME:MOVE:%d:%s:PLAY", player, buffer);
+          send_output(game.p1_fd);
+          sprintf(output, "GAME:MOVE:%d:%s:WAIT", player, buffer);
+          send_output(game.p2_fd);
+        }
+        else if (p2_move) // can p2 move again ?
+        {
+          printf("Player 1 can't move but player 2 can. Change nothing to the players stauts\n");
+           sprintf(output, "GAME:MOVE:%d:%s:WAIT", player, buffer);
+           send_output(game.p1_fd);
+           sprintf(output, "GAME:MOVE:%d:%s:PLAY", player, buffer);
+           send_output(game.p2_fd);
+        }
+        else // no one can move
+        {
+          sprintf(output, "GAME:MOVE:%d:%s:WAIT", player, buffer);
+          send_output(game.p1_fd);
+          sprintf(output, "GAME:MOVE:%d:%s:WAIT", player, buffer);
+          send_output(game.p2_fd);
+          printf("Neither can move. Endgame\n");
+          send_result(&game);
+          memset(&game, 0, sizeof(game));
+        }
       }
     } else {
       printf("not a valid move\n");
@@ -515,6 +560,7 @@ int valid_move(Game game, int row, int col, int player)
     }
 
     if (has_opponent_pieces && found_color) {
+        printf("%d - %d is a valid move for %s\n", row, col, player ? "white" : "black");
       return 1;
     }
   }
@@ -588,12 +634,6 @@ int can_play(Game game, int player)
     for (int j = 0; j < 8; j++)
       moves += (!game.grid[i][j] && valid_move(game, i, j, player));
   return !!moves;
-}
-
-int end(Game * game)
-{
-  print_game(game);
-  return (!can_play(*game, game->p1_fd) && !can_play(*game, game->p2_fd));
 }
 
 void send_result(Game * game)
