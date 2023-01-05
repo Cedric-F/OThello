@@ -324,8 +324,6 @@ void update_move(gpointer data)
   row = m->row;
   player = m->player;
 
-  printf("New cell : %d %d %d\n", m->col, m->row, m->player);
-
   char * coord;
 
   coord=malloc(3*sizeof(char));
@@ -340,14 +338,12 @@ void update_move(gpointer data)
   { // image pion noir
     gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_noir.png");
   }
-  printf("img set\n");
   free(m);
   // gdk_threads_leave();
 }
 
 void update_white_label(gpointer data)
 {
-  printf("updated white label\n");
   char * text = (char *) data;
   gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_J1")), text);
 }
@@ -428,7 +424,6 @@ void change_img_case(int col, int lig, int couleur_j)
   { // image pion noir
     gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_noir.png");
   }
-  printf("img set\n");
 }
 
 /* Fonction permettant changer nom joueur blanc dans cadre Score */
@@ -485,7 +480,7 @@ static void player_move(GtkWidget *p_case)
   sprintf(msg, "GAME:%d:MOVE:%d:%d-%d", game_id, couleur, lig, col);
 
   n = send(*(state->sockfd), msg, strlen(msg), 0);
-  //printf(">> [%d bytes] %s\n", n, msg);
+  printf(">> [%d bytes] %s\n", n, msg);
 }
 
 /* Fonction retournant texte du champs adresse du serveur de l'interface graphique */
@@ -665,8 +660,6 @@ void degele_damier(void)
 /* Fonction permettant d'initialiser le plateau de jeu */
 void init_game_interface(gpointer data)
 {
-  // gdk_threads_enter();
-  printf("hello\n");
   int (*damier)[8] = (int(*)[8])data;
   char * text_you = g_strdup("You");
   char * text_opponent = g_strdup("Opponent");
@@ -684,25 +677,18 @@ void init_game_interface(gpointer data)
   // Initialisation des scores et des joueurs
   if(couleur==1)
   {
-    /*set_label_J1("You");
-    set_label_J2("Opponent");*/
     update_white_label(text_you);
     update_black_label(text_opponent);
   }
   else
   {
-    /*set_label_J1("Opponent");
-    set_label_J2("You");*/
     update_black_label(text_you);
     update_white_label(text_opponent);
   }
-  /*set_score_J1(2);
-  set_score_J2(2);*/
   int white = 2;
   int black = 2;
   update_white_score(&white);
   update_black_score(&black);
-  // gdk_threads_leave();
 }
 
 /* Fonction reinitialisant la liste des joueurs sur l'interface graphique */
