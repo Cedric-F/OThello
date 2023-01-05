@@ -23,14 +23,14 @@
 */
 
 void disable_button_start(gpointer data);
-void init_game_interface(gpointer data);
-void update_white_label(gpointer data);
-void update_black_label(gpointer data);
-void update_white_score(gpointer data);
-void update_black_score(gpointer data);
-void update_title(gpointer data);
-void update_move(gpointer data);
-void count_score(gpointer data);
+gboolean init_game_interface(gpointer data);
+gboolean update_white_label(gpointer data);
+gboolean update_black_label(gpointer data);
+gboolean update_white_score(gpointer data);
+gboolean update_black_score(gpointer data);
+gboolean update_title(gpointer data);
+gboolean update_move(gpointer data);
+gboolean count_score(gpointer data);
 
 #define MAXDATASIZE 256
 
@@ -308,14 +308,15 @@ void * t_read(void * state)
   exit(EXIT_SUCCESS);
 }
 
-void update_title(gpointer data)
+gboolean update_title(gpointer data)
 {
   GtkWidget * p_win = (GtkWidget *) gtk_builder_get_object (p_builder, "window1");
   char * text = (char *) data;
   gtk_window_set_title((GtkWindow *) p_win, text);
+  return FALSE;
 }
 
-void update_move(gpointer data)
+gboolean update_move(gpointer data)
 {
   // gdk_threads_enter();
   Move * m = (Move *) data;
@@ -340,22 +341,25 @@ void update_move(gpointer data)
   }
   free(m);
   // gdk_threads_leave();
+  return FALSE;
 }
 
-void update_white_label(gpointer data)
+gboolean update_white_label(gpointer data)
 {
   char * text = (char *) data;
   gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_J1")), text);
+  return FALSE;
 }
 
-void update_black_label(gpointer data)
+gboolean update_black_label(gpointer data)
 {
   char * text = (char *) data;
   gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_J2")), text);
+  return FALSE;
 }
 
 
-void update_white_score(gpointer data)
+gboolean update_white_score(gpointer data)
 {
   int * score = (int *) data;
   char *s;
@@ -363,8 +367,10 @@ void update_white_score(gpointer data)
   s=malloc(5*sizeof(char));
   sprintf(s, "%d", *score);
   gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_ScoreJ1")), s);
+  return FALSE;
 }
-void update_black_score(gpointer data)
+
+gboolean update_black_score(gpointer data)
 {
   int * score = (int *) data;
   char *s;
@@ -372,6 +378,7 @@ void update_black_score(gpointer data)
   s=malloc(5*sizeof(char));
   sprintf(s, "%d", *score);
   gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_ScoreJ2")), s);
+  return FALSE;
 }
 
 /* Fonction transforme coordonnees du damier graphique en indexes pour matrice du damier */
@@ -658,8 +665,9 @@ void degele_damier(void)
 }
 
 /* Fonction permettant d'initialiser le plateau de jeu */
-void init_game_interface(gpointer data)
+gboolean init_game_interface(gpointer data)
 {
+printf("hello\n");
   int (*damier)[8] = (int(*)[8])data;
   char * text_you = g_strdup("You");
   char * text_opponent = g_strdup("Opponent");
@@ -689,6 +697,8 @@ void init_game_interface(gpointer data)
   int black = 2;
   update_white_score(&white);
   update_black_score(&black);
+
+  return FALSE;
 }
 
 /* Fonction reinitialisant la liste des joueurs sur l'interface graphique */
@@ -732,7 +742,7 @@ int get_score_J2(void)
   return atoi(c);
 }
 
-void count_score(gpointer data)
+gboolean count_score(gpointer data)
 {
   // gdk_threads_enter();
   int (*damier)[8] = (int(*)[8])data;
@@ -754,6 +764,7 @@ void count_score(gpointer data)
   update_black_score(&nb_p2);
   //printf("End count_score\n");
 //   gdk_threads_leave();
+  return FALSE;
 }
 
 int main (int argc, char ** argv)
