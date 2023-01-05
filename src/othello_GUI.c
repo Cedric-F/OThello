@@ -16,209 +16,25 @@
 #include <sys/signalfd.h>
 
 #include <gtk/gtk.h>
+#include <glib.h>
 
+/*
+============ THREAD SAFE INTERFACE UPDATE FUNCTION ============
+*/
+
+void disable_button_start(gpointer data);
+void init_game_interface(gpointer data);
+void update_white_label(gpointer data);
+void update_black_label(gpointer data);
+void update_white_score(gpointer data);
+void update_black_score(gpointer data);
+void update_title(gpointer data);
+void update_move(gpointer data);
+void count_score(gpointer data);
 
 #define MAXDATASIZE 256
 
-void count_score(void);
-
-/* Fonction desactivant les cases du damier */
-void gele_damier(void);
-
-/* Fonction activant les cases du damier */
-void degele_damier(void);
-
-/* Fonction permettant d'initialiser le plateau de jeu */
-void init_game_interface(void);
-
-/* Fonction reinitialisant la liste des joueurs sur l'interface graphique */
-void reset_liste_joueurs(void);
-
-/* Fonction permettant d'ajouter un joueur dans la liste des joueurs sur l'interface graphique */
-void affich_joueur_buffer(char *login);
-
-/* Fonction affichant boite de dialogue si partie gagnee */
-void affiche_fenetre_fin(char * message);
-
-/* Fonction affichant boite de dialogue si partie perdue */
-void affiche_fenetre_perdu(void);
-  
-/* Fonction permettant de changer l'image d'une case du damier (indiqué par sa colonne et sa ligne) */
-void change_img_case(int col, int lig, int couleur_j);
-
-typedef struct State State;
-
-struct State {
-  int * sockfd;
-  int * play;
-};
-
-int startsWith( const char * theString, const char * theBase ) {
-  return strncmp( theString, theBase, strlen( theBase ) ) == 0;
-}
-
-/* Variables globales */
-  int damier[8][8]; // tableau associe au damier
-  int couleur;    // 0 : pour noir, 1 : pour blanc
-
-  char * login;
-
-  State * state;
-
-  int game_id = -1;
-
-  pthread_t read_thread;
-  
-  int port;   // numero port passé lors de l'appel
-
-  char * addr_j2, * port_j2;  // Info sur adversaire
-  char * target_name;
-
-  pthread_t thr_id; // Id du thread fils gerant connexion socket
-  
-  int sockfd, newsockfd=-1; // descripteurs de socket
-  int addr_size;   // taille adresse
-  struct sockaddr *their_addr;  // structure pour stocker adresse adversaire
-  struct sockaddr_in server;
-
-  int serverSize = sizeof(server);
-
-  fd_set master, read_fds, write_fds; // ensembles de socket pour toutes les sockets actives avec select
-  int max_sd;     // utilise pour select
-
-/* Variables globales associées à l'interface graphique */
-  GtkBuilder  *  p_builder   = NULL;
-  GError      *  p_err       = NULL;
-
-
-void signup(char * login);
-void get_users(char message[]);
-
-// Thread de lecture
-
-void * t_read(void * state)
-{
-  State * st = (State *) state;
-  char buffer[MAXDATASIZE];
-  char * token;
-  ssize_t size;
-  GtkWidget * p_win = (GtkWidget *) gtk_builder_get_object (p_builder, "window1");
-
-  while(1)
-  {
-    memset(buffer, 0, sizeof(buffer));
-    size = read(*(st->sockfd), buffer, MAXDATASIZE);
-    if (size == 0)
-    {
-      printf("\nLost connection to server...\n");
-      exit(EXIT_FAILURE);
-    }
-    else if (size >= 1)
-    {
-      fflush(stdout);
-      printf("\n<< [%ld bytes] %s\n", size, buffer);
-      token = strtok(buffer, "\n");
-      if (strcmp(token, "LIST") == 0)
-      {
-        get_users(buffer);
-        memset(buffer, 0x00, sizeof(buffer));
-      }
-      else // not updated user list
-      {
-        token = strtok(buffer, ":");
-        if (token != NULL)
-        {
-          if (strcmp(token, "GAME") == 0) // game related data
-          {
-            token = strtok(NULL, ":");
-            if (token != NULL && strcmp(token, "NEW") == 0) // new game
-            {
-              token = strtok(NULL, ":"); // Game id
-              if (token != NULL)
-              {
-                game_id = strtol(token, NULL, 10);
-                token = strtok(NULL, ":");
-                couleur = (int) strtol(token, NULL, 10);
-                init_game_interface();
-                token = strtok(NULL, "\0");
-                if (strcmp(token, "WAIT") == 0)
-                {
-                  gtk_window_set_title((GtkWindow *) p_win, "Wait for your turn");
-                  *(st->play) = 0;
-                }
-                else if (strcmp(token, "PLAY") == 0)
-                {
-                  gtk_window_set_title((GtkWindow *) p_win, "Your turn to play");
-                  *(st->play) = 1;
-                }
-              }
-            }
-            else if (token != NULL && strcmp(token, "MOVE") == 0)
-            {
-              int move = (int) strtol(strtok(NULL, ":"), NULL, 10);
-              while((token = strtok(NULL, ":\0")) != NULL)
-              {
-                if (strcmp(token, "PLAY") && strcmp(token, "WAIT")) // token is coords
-                {
-                  char * a;
-                  char * b;
-                  a = strsep(&token, "-");
-                  b = strsep(&token, "\0");
-                  int col, lig;
-                  col = (int) strtol(a, NULL, 10);
-                  lig = (int) strtol(b, NULL, 10);
-                  damier[lig][col] = move;
-                  change_img_case(lig, col, move);
-                  //count_score();
-                }
-                else if (strcmp(token, "WAIT") == 0)
-                {
-                  gtk_window_set_title((GtkWindow *) p_win, "Wait for your turn");
-                  *(st->play) = 0;
-                }
-                else if (strcmp(token, "PLAY") == 0)
-                {
-                  gtk_window_set_title((GtkWindow *) p_win, "Your turn to play");
-                  *(st->play) = 1;
-                }
-              }
-            }
-            else if (token != NULL && strcmp(token, "WON") == 0)
-            {
-              *(st->play) = 0;
-              affiche_fenetre_fin("Fin de la partie.\n\nVous avez gagné !");
-            }
-            else if (token != NULL && strcmp(token, "LOST") == 0)
-            {
-              *(st->play) = 0;
-              affiche_fenetre_fin("Fin de la partie.\n\nVous avez perdu !");
-            }
-          }
-        }
-      }
-    }
-    else if (size < 0)
-    {
-      printf("Some error with read\n");
-      exit(EXIT_FAILURE);
-    }
-  }
-  exit(EXIT_SUCCESS);
-}
-
 // Entetes des fonctions  
-
-/* Fonction permettant changer nom joueur blanc dans cadre Score */
-void set_label_J1(char *texte);
-
-/* Fonction permettant de changer nom joueur noir dans cadre Score */
-void set_label_J2(char *texte);
-
-/* Fonction permettant de changer score joueur blanc dans cadre Score */
-void set_score_J1(int score);
-
-/* Fonction permettant de changer score joueur noir dans cadre Score */
-void set_score_J2(int score);
 
 /* Fonction permettant de récupérer score joueur blanc dans cadre Score */
 int get_score_J1(void);
@@ -228,6 +44,8 @@ int get_score_J2(void);
 
 /* Fonction transformant coordonnees du damier graphique en indexes pour matrice du damier */
 void coord_to_indexes(const gchar *coord, int *col, int *lig);
+
+void indexes_to_coord(int col, int lig, char * coord);
 
 /* Fonction appelee lors du clique sur une case du damier */
 static void player_move(GtkWidget *p_case);
@@ -248,13 +66,317 @@ char *read_target(void);
 static void server_connect(GtkWidget *b);
 
 /* Fonction desactivant bouton demarrer partie */
-void disable_button_start(void);
-
-/* Fonction desactivant bouton demarrer partie */
 void disable_server_connect(void);
 
 /* Fonction appelee lors du clique du bouton Demarrer partie */
 static void start_game(GtkWidget *b);
+
+/* Fonction desactivant les cases du damier */
+void gele_damier(void);
+
+/* Fonction activant les cases du damier */
+void degele_damier(void);
+
+
+/* Fonction reinitialisant la liste des joueurs sur l'interface graphique */
+void reset_liste_joueurs(void);
+
+/* Fonction permettant d'ajouter un joueur dans la liste des joueurs sur l'interface graphique */
+void affich_joueur_buffer(char *login);
+
+/* Fonction affichant boite de dialogue si partie gagnee */
+void affiche_fenetre_fin(char * message);
+
+/* Fonction permettant de changer l'image d'une case du damier (indiqué par sa colonne et sa ligne) */
+void change_img_case(int col, int lig, int couleur_j);
+
+typedef struct State State;
+typedef struct Move Move;
+
+struct State {
+  int * sockfd;
+  int * play;
+};
+
+struct Move {
+  int col;
+  int row;
+  int player;
+};
+
+/* Variables globales */
+int damier[8][8]; // tableau associe au damier
+int couleur;    // 0 : pour noir, 1 : pour blanc
+
+char * login;
+
+State * state;
+
+int game_id = -1;
+
+pthread_t read_thread;
+
+int port;   // numero port passé lors de l'appel
+
+char * addr_j2, * port_j2;  // Info sur adversaire
+char * target_name;
+
+pthread_t thr_id; // Id du thread fils gerant connexion socket
+
+int sockfd; // descripteurs de socket
+struct sockaddr_in server;
+
+int serverSize = sizeof(server);
+
+/* Variables globales associées à l'interface graphique */
+GtkBuilder  *  p_builder   = NULL;
+GError      *  p_err       = NULL;
+
+
+void signup(char * login);
+void get_users(char message[]);
+
+// Thread de lecture
+
+void * t_read(void * state)
+{
+  // We'll need the main loop context for thread-safe updates of our interface
+  GMainContext *main_context = g_main_context_default();
+
+  State * st = (State *) state;
+  char buffer[MAXDATASIZE]; // server input
+  ssize_t size; // input size
+
+  char * token; // will hold the commands tokens
+  
+  // the window's context
+  GtkWidget * p_win = (GtkWidget *) gtk_builder_get_object (p_builder, "window1");
+
+  // window titles
+  char * wait = g_strdup("Wait for your turn");
+  char * play = g_strdup("Your turn to play");
+
+  while(1)
+  {
+    // Clearing the buffer for next input
+    memset(buffer, 0, MAXDATASIZE);
+    
+    // continuously reading from the server
+    size = read(*(st->sockfd), buffer, MAXDATASIZE);
+    if (size == 0)
+    {
+      printf("\nLost connection to server...\n");
+      exit(EXIT_FAILURE);
+    }
+    else if (size >= 1) // Message received
+    {
+      fflush(stdout);
+      printf("\n<< [%ld bytes] %s\n", size, buffer);
+
+      // Expected values :
+      // LIST, GAME:<*>
+      token = strtok(buffer, "\n");
+
+      if (strcmp(token, "LIST") == 0)
+      { // Received list of connected players
+        get_users(buffer);
+      }
+      else // not updated user list
+      {
+        token = strtok(buffer, ":");
+        if (token != NULL)
+        {
+          // Making sure that we received a GAME input
+          if (strcmp(token, "GAME") == 0)
+          {
+            // Sub command of the game input
+            // Expected values : NEW:ID:Player:Player, MOVE:Player:Coords:Status
+            token = strtok(NULL, ":");
+
+            // Command is a new game request
+            if (token != NULL && strcmp(token, "NEW") == 0)
+            {
+              // Safely disable the game_start button in the main thread
+              g_main_context_invoke(main_context, (GSourceFunc) disable_button_start, p_builder);
+
+              // Game ID to send back to the server
+              token = strtok(NULL, ":");
+              if (token != NULL)
+              {
+                game_id = strtol(token, NULL, 10);
+
+                // Player's position (0 for black, 1 for white)
+                token = strtok(NULL, ":");
+                couleur = (int) strtol(token, NULL, 10);
+
+                // Safely initialize the game interface in the main thread
+                g_main_context_invoke(main_context, (GSourceFunc) init_game_interface, damier);
+
+                // Game status for the player
+                // Expected values : WAIT or PLAY
+                token = strtok(NULL, "\0");
+                if (token != NULL && strcmp(token, "WAIT") == 0)
+                {
+                  // Safely update the window's title with the player's turn in the main thread
+                  g_main_context_invoke(main_context, (GSourceFunc) update_title, wait);
+                  *(st->play) = 0;
+                }
+                else if (token != NULL && strcmp(token, "PLAY") == 0)
+                {
+                  // Safely update the window's title with the player's turn in the main thread
+                  g_main_context_invoke(main_context, (GSourceFunc) update_title, play);                  //printf("New window title is set\n");
+                  *(st->play) = 1;
+                }
+              }
+            }
+            // Command is a move update
+            // Expected values : MOVE:Player:<coord-list>:Status
+            else if (token != NULL && strcmp(token, "MOVE") == 0)
+            {
+              // Move's color (0 for black and 1 for white)
+              int move = (int) strtol(strtok(NULL, ":"), NULL, 10);
+              // We iterate over the tokens until the end of the string
+              while((token = strtok(NULL, ":\0")) != NULL)
+              {
+                // If the token is not a game status (WAIT / PLAY)
+                if (strcmp(token, "PLAY") && strcmp(token, "WAIT"))
+                {
+                  // token is a set of coordinates <row>-<col>
+
+                  char *ptr = token;
+                  // get the row position
+                  char * r = strsep(&ptr, "-");
+                  // get the column position
+                  char * c = strsep(&ptr, "\0");
+
+                  int col, row;
+                  // convert r and c into integers
+                  row = (int) strtol(r, NULL, 10);
+                  col = (int) strtol(c, NULL, 10);
+
+                  // update the grid's data with the move's color at the given position
+                  damier[row][col] = move;
+
+                  // Stores the move's data
+                  Move * m = (Move *) malloc(sizeof(Move));
+                  m->col = col;
+                  m->row = row;
+                  m->player = move;
+                  // Safely update the game's interface with the move's date in the main thread
+                  g_main_context_invoke(main_context, (GSourceFunc) update_move, m);
+
+                  // Safely update the player's score in the main thread
+                  g_main_context_invoke(main_context, (GSourceFunc) count_score, damier);
+                }
+                // We reach the end of the coordinate's list with a game status
+                else if (strcmp(token, "WAIT") == 0)
+                {
+                  // Safely update the window's title in the main thread
+                  g_main_context_invoke(main_context, (GSourceFunc) update_title, wait);
+                  *(st->play) = 0;
+                }
+                else if (strcmp(token, "PLAY") == 0)
+                {
+                  // Safely update the window's title in the main thread
+                  g_main_context_invoke(main_context, (GSourceFunc) update_title, play);
+                  *(st->play) = 1;
+                }
+              }
+            }
+            // Game ends with the winning message
+            else if (token != NULL && strcmp(token, "WON") == 0)
+            {
+              *(st->play) = 0;
+              affiche_fenetre_fin("Fin de la partie.\n\nVous avez gagné !");
+            }
+            // Game ends with the losing message
+            else if (token != NULL && strcmp(token, "LOST") == 0)
+            {
+              *(st->play) = 0;
+              affiche_fenetre_fin("Fin de la partie.\n\nVous avez perdu !");
+            }
+          }
+        }
+      }
+    }
+    else if (size < 0)
+    {
+      perror("An error occured while trying to read from the server\n");
+      exit(EXIT_FAILURE);
+    }
+  }
+  exit(EXIT_SUCCESS);
+}
+
+void update_title(gpointer data)
+{
+  GtkWidget * p_win = (GtkWidget *) gtk_builder_get_object (p_builder, "window1");
+  char * text = (char *) data;
+  gtk_window_set_title((GtkWindow *) p_win, text);
+}
+
+void update_move(gpointer data)
+{
+  // gdk_threads_enter();
+  Move * m = (Move *) data;
+  int col, row, player;
+  col = m->col;
+  row = m->row;
+  player = m->player;
+
+  printf("New cell : %d %d %d\n", m->col, m->row, m->player);
+
+  char * coord;
+
+  coord=malloc(3*sizeof(char));
+
+  indexes_to_coord(col, row, coord);
+
+  if(player)
+  { // image pion blanc
+    gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_blanc.png");
+  }
+  else
+  { // image pion noir
+    gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_noir.png");
+  }
+  printf("img set\n");
+  free(m);
+  // gdk_threads_leave();
+}
+
+void update_white_label(gpointer data)
+{
+  printf("updated white label\n");
+  char * text = (char *) data;
+  gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_J1")), text);
+}
+
+void update_black_label(gpointer data)
+{
+  char * text = (char *) data;
+  gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_J2")), text);
+}
+
+
+void update_white_score(gpointer data)
+{
+  int * score = (int *) data;
+  char *s;
+  
+  s=malloc(5*sizeof(char));
+  sprintf(s, "%d", *score);
+  gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_ScoreJ1")), s);
+}
+void update_black_score(gpointer data)
+{
+  int * score = (int *) data;
+  char *s;
+  
+  s=malloc(5*sizeof(char));
+  sprintf(s, "%d", *score);
+  gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_ScoreJ2")), s);
+}
 
 /* Fonction transforme coordonnees du damier graphique en indexes pour matrice du damier */
 void coord_to_indexes(const gchar *coord, int *col, int *lig)
@@ -276,20 +398,28 @@ void indexes_to_coord(int col, int lig, char *coord)
 {
   char c;
 
-  c=(char) (65 + col);
-    
+  //printf("indexes_to_coord %d - %d \n", lig, col);
+
+  c=(char) ('A' + col % 26);
+
+  //printf("sprintf coord\n");
   sprintf(coord, "%c%d", c, lig+1);
+  //printf("end indexes_to_coord %s\n", coord);
 }
 
 /* Fonction permettant de changer l'image d'une case du damier (indiqué par sa colonne et sa ligne) */
 void change_img_case(int col, int lig, int couleur_j)
 {
+  //printf("start change_img_case\n");
   char * coord;
 
   coord=malloc(3*sizeof(char));
 
+  //printf("coord malloc\n");
+
   indexes_to_coord(col, lig, coord);
 
+  //printf("set img\n");
   if(couleur_j)
   { // image pion blanc
     gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_blanc.png");
@@ -298,40 +428,47 @@ void change_img_case(int col, int lig, int couleur_j)
   { // image pion noir
     gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_noir.png");
   }
+  printf("img set\n");
 }
 
 /* Fonction permettant changer nom joueur blanc dans cadre Score */
-void set_label_J1(char *texte)
+void set_label_J1(char *text)
 {
-  gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_J1")), texte);
+  gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_J1")), text);
 }
 
 /* Fonction permettant de changer nom joueur noir dans cadre Score */
-void set_label_J2(char *texte)
+void set_label_J2(char *text)
 {
-  gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_J2")), texte);
+  gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_J2")), text);
 }
 
 /* Fonction permettant de changer score joueur blanc dans cadre Score */
 void set_score_J1(int score)
 {
+  //printf("set_score_J1\n");
   char *s;
   
   s=malloc(5*sizeof(char));
   sprintf(s, "%d", score);
   
+  //printf("setting label for j1\n");
   gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_ScoreJ1")), s);
+  //printf("set_score_J1 end\n");
 }
 
 /* Fonction permettant de changer score joueur noir dans cadre Score */
 void set_score_J2(int score)
 {
+  //printf("set_score_J2\n");
   char *s;
   
   s=malloc(5*sizeof(char));
   sprintf(s, "%d", score);
   
+  //printf("setting label for j2\n");
   gtk_label_set_text(GTK_LABEL(gtk_builder_get_object (p_builder, "label_ScoreJ2")), s);
+  //printf("set_score_J2 end\n");
 }
 
 /* Fonction appelee lors du clique sur une case du damier */
@@ -348,7 +485,7 @@ static void player_move(GtkWidget *p_case)
   sprintf(msg, "GAME:%d:MOVE:%d:%d-%d", game_id, couleur, lig, col);
 
   n = send(*(state->sockfd), msg, strlen(msg), 0);
-  printf(">> [%d bytes] : %s\n", n, msg);
+  //printf(">> [%d bytes] %s\n", n, msg);
 }
 
 /* Fonction retournant texte du champs adresse du serveur de l'interface graphique */
@@ -408,7 +545,7 @@ static void server_connect(GtkWidget *b)
 
   if (strlen(login) < 1) return;
 
-  printf("Connection button triggered\n");
+  //printf("Connection button triggered\n");
 
   if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     perror("An error occured while trying to create a socket : ");
@@ -421,14 +558,14 @@ static void server_connect(GtkWidget *b)
   server.sin_port = htons(atoi(get_server_port()));
   server.sin_addr.s_addr = inet_addr(get_server_address());
 
-  printf("Connecting to server...\n");
+  //printf("Connecting to server...\n");
 
   if (connect(sockfd, (struct sockaddr *) &server, sizeof(server)) < 0) {
-    printf("An error occured while trying to connect to the server\n");
+    //printf("An error occured while trying to connect to the server\n");
     return;
   }
 
-  printf("Connected !\n");
+  //printf("Connected !\n");
   disable_server_connect();
 
   (*state).sockfd = &sockfd;
@@ -448,7 +585,7 @@ void signup(char * login)
   char message[5 + strlen(login)];
   sprintf(message, "NAME:%s", login);
   n = send(sockfd, message, strlen(message), 0);
-  printf("\n>> [%d bytes] : %s\n", n, message);
+  //printf("\n>> [%d bytes] : %s\n", n, message);
 }
 
 void get_users(char * message)
@@ -476,8 +613,9 @@ void disable_server_connect(void)
 }
 
 /* Fonction desactivant bouton demarrer partie */
-void disable_button_start(void)
+void disable_button_start(gpointer data)
 {
+  GtkBuilder * p_builder = (GtkBuilder *) data;
   gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "button_start"), FALSE);
 }
 
@@ -496,7 +634,7 @@ static void start_game(GtkWidget *b)
   
     sprintf(message, "GAME:NEW:%s:%s", login, target_name);
     n = send(sockfd, message, sizeof(message), 0);
-    printf("\n>> [%d bytes] : %s\n", n, message);
+    //printf("\n>> [%d bytes] : %s\n", n, message);
   }
 }
 
@@ -525,8 +663,13 @@ void degele_damier(void)
 }
 
 /* Fonction permettant d'initialiser le plateau de jeu */
-void init_game_interface(void)
+void init_game_interface(gpointer data)
 {
+  // gdk_threads_enter();
+  printf("hello\n");
+  int (*damier)[8] = (int(*)[8])data;
+  char * text_you = g_strdup("You");
+  char * text_opponent = g_strdup("Opponent");
   // Initilisation du damier (D4=blanc, E4=noir, D5=noir, E5=blanc)
   change_img_case(3, 3, 1);
   change_img_case(4, 3, 0);
@@ -541,17 +684,25 @@ void init_game_interface(void)
   // Initialisation des scores et des joueurs
   if(couleur==1)
   {
-    set_label_J1("You");
-    set_label_J2("Opponent");
+    /*set_label_J1("You");
+    set_label_J2("Opponent");*/
+    update_white_label(text_you);
+    update_black_label(text_opponent);
   }
   else
   {
-    set_label_J1("Opponent");
-    set_label_J2("You");
+    /*set_label_J1("Opponent");
+    set_label_J2("You");*/
+    update_black_label(text_you);
+    update_white_label(text_opponent);
   }
-
-  set_score_J1(2);
-  set_score_J2(2);
+  /*set_score_J1(2);
+  set_score_J2(2);*/
+  int white = 2;
+  int black = 2;
+  update_white_score(&white);
+  update_black_score(&black);
+  // gdk_threads_leave();
 }
 
 /* Fonction reinitialisant la liste des joueurs sur l'interface graphique */
@@ -595,10 +746,13 @@ int get_score_J2(void)
   return atoi(c);
 }
 
-void count_score(void)
+void count_score(gpointer data)
 {
+  // gdk_threads_enter();
+  int (*damier)[8] = (int(*)[8])data;
   int nb_p1 = 0;
   int nb_p2 = 0;
+  //printf("Counting scores\n");
   for (int i = 0; i < 8; i++)
   {
     for (int j = 0; j < 8; j++)
@@ -607,8 +761,13 @@ void count_score(void)
       else if (damier[i][j] != -1) nb_p2++;
     }
   }
-  set_score_J1(nb_p1);
-  set_score_J2(nb_p2);
+  //printf("Scores are white: %d\t\tblack:%d\n", nb_p1, nb_p2);
+  //printf("Calling set_score_J1\n");
+  update_white_score(&nb_p1);
+  //printf("Calling set_score_J2\n");
+  update_black_score(&nb_p2);
+  //printf("End count_score\n");
+//   gdk_threads_leave();
 }
 
 int main (int argc, char ** argv)
@@ -673,6 +832,7 @@ int main (int argc, char ** argv)
   }
 
   pthread_join(read_thread, NULL);
+  gtk_main_quit();
  
   return EXIT_SUCCESS;
 }

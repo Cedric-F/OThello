@@ -277,7 +277,7 @@ void parse_new_game(Game * game)
   j2 = strtok(NULL, ":"); // Get player 2
 
   int p_exist = 0;
-  if (j1 != NULL && j2 != NULL) // If both players names are provided
+  if (j1 != NULL && j2 != NULL || strcmp(j1, j2) == 0) // If both players names are provided and different
   {
     int p1_fd_exists = 0;
     int p2_fd_exists = 0;
@@ -491,13 +491,12 @@ int valid_move(Game game, int row, int col, int player)
   int r, c;
 
   int directions[8][2] = {{-1,-1}, {-1,0}, {-1,1}, {0,-1}, {0,1}, {1,-1}, {1,0}, {1,1}};
-  int has_opponent_piece = 0;
+  int has_opponent_pieces = 0;
   int found_color = 0;
-
 
   for (int i = 0; i < 8; i++)
   {
-    has_opponent_piece = 0;
+    has_opponent_pieces = 0;
     found_color = 0;
     r = row + directions[i][0];
     c = col + directions[i][1];
@@ -505,8 +504,8 @@ int valid_move(Game game, int row, int col, int player)
     {
       if (game.grid[r][c] == opponent) // check that the next cell is occupied by the opponent
       {
-        has_opponent_piece = 1;
-      } else if (game.grid[r][c] == color && has_opponent_piece) {
+        has_opponent_pieces = 1;
+      } else if (game.grid[r][c] == color && has_opponent_pieces) {
         found_color = 1;
         break;
       } else break;
@@ -515,7 +514,9 @@ int valid_move(Game game, int row, int col, int player)
       c += directions[i][1];
     }
 
-    if (has_opponent_piece && found_color) return 1;
+    if (has_opponent_pieces && found_color) {
+      return 1;
+    }
   }
 
   return 0;
@@ -529,14 +530,14 @@ void move(Game * game, int row, int col, int player, char * captured_pieces)
   int r, c;
 
   int directions[8][2] = {{-1,-1}, {-1,0}, {-1,1}, {0,-1}, {0,1}, {1,-1}, {1,0}, {1,1}};
-  int has_opponent_piece = 0;
+  int has_opponent_pieces = 0;
   int found_color = 0;
 
   char piece[5];
 
   for (int i = 0; i < 8; i++)
   {
-    has_opponent_piece = 0;
+    has_opponent_pieces = 0;
     found_color = 0;
     r = row + directions[i][0];
     c = col + directions[i][1];
@@ -544,8 +545,8 @@ void move(Game * game, int row, int col, int player, char * captured_pieces)
     {
       if (game->grid[r][c] == opponent) // check that the next cell is occupied by the opponent
       {
-        has_opponent_piece = 1;
-      } else if (game->grid[r][c] == color && has_opponent_piece) {
+        has_opponent_pieces = 1;
+      } else if (game->grid[r][c] == color && has_opponent_pieces) {
         found_color = 1;
         break;
       } else break;
@@ -554,7 +555,7 @@ void move(Game * game, int row, int col, int player, char * captured_pieces)
       c += directions[i][1];
     }
 
-    if (has_opponent_piece && found_color)
+    if (has_opponent_pieces && found_color)
     {
       // Capture the opponent's pieces in this direction
       r = row + directions[i][0];
