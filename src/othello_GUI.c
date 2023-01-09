@@ -34,15 +34,15 @@ gboolean disable_game_controls(gpointer data);
 gboolean enable_game_controls(gpointer data);
 gboolean affich_joueur_buffer(gpointer data);
 gboolean reset_liste_joueurs(gpointer data);
-gboolean init_game_interface(gpointer data);
 gboolean affiche_fenetre_fin(gpointer data);
 gboolean update_white_label(gpointer data);
 gboolean update_black_label(gpointer data);
 gboolean update_white_score(gpointer data);
 gboolean update_black_score(gpointer data);
-gboolean update_move(gpointer data);
 gboolean update_title(gpointer data);
 gboolean count_score(gpointer data);
+gboolean update_move(gpointer data);
+gboolean init_game(gpointer data);
 
 /*
 ============ STATIC USER TRIGGERED CALLBACK FUNCTIONS ============
@@ -171,7 +171,7 @@ void * t_read(void * state)
           }
         } while (token != NULL);
       }
-      else // not updated user list
+      else // Not a new user list
       {
         token = strtok(buffer, ":");
         if (token != NULL)
@@ -200,7 +200,7 @@ void * t_read(void * state)
                 couleur = (int) strtol(token, NULL, 10);
 
                 // Safely initialize the game interface in the main thread
-                g_main_context_invoke(main_context, (GSourceFunc) init_game_interface, damier);
+                g_main_context_invoke(main_context, (GSourceFunc) init_game, damier);
 
                 // Game status for the player
                 // Expected values : WAIT or PLAY
@@ -214,7 +214,7 @@ void * t_read(void * state)
                 else if (token != NULL && strcmp(token, "PLAY") == 0)
                 {
                   // Safely update the window's title with the player's turn in the main thread
-                  g_main_context_invoke(main_context, (GSourceFunc) update_title, play);                  //printf("New window title is set\n");
+                  g_main_context_invoke(main_context, (GSourceFunc) update_title, play);
                   *(st->play) = 1;
                 }
               }
@@ -324,11 +324,11 @@ gboolean update_move(gpointer data)
 
   indexes_to_coord(col, row, coord);
 
-  if(player)
+  if(player == 1)
   { // image pion blanc
     gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_blanc.png");
   }
-  else
+  else if(player == 0)
   { // image pion noir
     gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_noir.png");
   }
@@ -499,14 +499,16 @@ gboolean enable_game_controls(gpointer data)
 }
 
 /* Fonction permettant d'initialiser le plateau de jeu */
-gboolean init_game_interface(gpointer data)
+gboolean init_game(gpointer data)
 {
   int (*damier)[8] = (int(*)[8])data;
   char * text_you = g_strdup("You");
   char * text_opponent = g_strdup("Opponent");
   for (int i = 0; i < 8; i++)
-    for (int j = 0; j < 8; j++)
+    for (int j = 0; j < 8; j++) {
+      damier[i][j] = -1;
       change_img_case(i, j, -1);
+    }
   // Initilisation du damier (D4=blanc, E4=noir, D5=noir, E5=blanc)
   change_img_case(3, 3, 1);
   change_img_case(4, 3, 0);
@@ -576,9 +578,11 @@ gboolean count_score(gpointer data)
   {
     for (int j = 0; j < 8; j++)
     {
+      printf("%d ", damier[i][j]);
       if (damier[i][j] == 1) nb_p1++;
-      else if (damier[i][j] != -1) nb_p2++;
+      else if (damier[i][j] == 0) nb_p2++;
     }
+    printf("\n");
   }
   update_white_score(&nb_p1);
   update_black_score(&nb_p2);

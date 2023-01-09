@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <time.h>
 
 #define RED "\e[0;31m"
 #define GRN "\e[0;32m"
@@ -25,6 +26,17 @@
 #define MAX_CLIENTS 10
 #define MAX_GAMES 5
 #define MAXDATASIZE 256
+
+/*
+================ MESSAGE FORMATS ================
+
+GAME:NEW:J1:J2 << J1 Receive new game request from player
+  GAME:NEW:ID:COLOR << JX Send the game info to both players
+GAME:ID:MOVE:COLOR:COORD << Jx Receive a move from player
+  GAME:MOVE:COLOR:COORDS:(WAIT|PLAY) >> JX Sends the result to both players, with a list of all the impacted moves
+  GAME:WIN >> Jx
+  GAME:LOST >> Jx
+*/
 
 typedef struct Game Game;
 typedef struct Client Client;
@@ -123,9 +135,31 @@ struct Game {
   Game * next;
 };
 
+Game * get_game_from_id(int id)
+{
+  Game * current = game_list;
+  while (current != NULL)
+  {
+    if (current->id == id) return current;
+    current = current->next;
+  }
+  return NULL;
+}
+
 Game * create_game(Client * p1, Client * p2)
 {
+  // Seed the random number generator
+  srand(time(0));
+
+  // Generate a random number between min and max
+  int min = 1;
+  int max = 65536;
+  int random_number;
+  do {
+    random_number = rand() % (max - min + 1) + min;
+  } while(get_game_from_id(random_number) != NULL);
   Game * game = (Game *) malloc(sizeof(Game));
+  game->id = random_number;
   p1->busy = 1;
   p2->busy = 1;
   game->p1 = p1;
@@ -170,17 +204,6 @@ void remove_game(int id)
     prev = current;
     current = current->next;
   }
-}
-
-Game * get_game_from_id(int id)
-{
-  Game * current = game_list;
-  while (current != NULL)
-  {
-    if (current->id == id) return current;
-    current = current->next;
-  }
-  return NULL;
 }
 
 char input[MAXDATASIZE];
@@ -256,8 +279,6 @@ int send_output_no_clear(int socket)
 
 int main(int argc, char * argv[])
 {
-  int game_count = 0;
-  char dest[24];
   int activity, val, sd, max_sd;
   fd_set readfds;
 
@@ -287,20 +308,13 @@ int main(int argc, char * argv[])
 
     Client * current = client_list;
 
+    // Add the clients sockets to the file descriptors' set
     while (current != NULL)
     {
       sd = current->socket;
       if (sd > 0) FD_SET(sd, &readfds);
       if (sd > max_sd) max_sd = sd;
       current = current->next;
-    }
-
-    for (i = 0; i < MAX_CLIENTS; i++)
-    { // Add all the connected clients to the set
-      sd = clients[i];
-      if (sd > 0) FD_SET(sd, &readfds);
-      // update max socket with last entry in the set
-      if (sd > max_sd) max_sd = sd;
     }
 
     // Monitor the sockets for readability
@@ -327,15 +341,6 @@ int main(int argc, char * argv[])
       Client * new_client = get_client_by_socket(client);
 
       if (new_client == NULL) new_client = add_client(client);
-
-      for (i = 0; i < MAX_CLIENTS; i++)
-      {
-        if (clients[i] == 0)
-        {
-          clients[i] = client;
-          break;
-        }
-      }
 
       printf("%s", YEL);
       printf("Incomming connection:\n");
@@ -569,25 +574,6 @@ void send_list()
   }
 }
 
-/*
-void print_game(Game * game)
-{
-  printf("Game ID : %d\n", game->id);
-  if (game->p1 != NULL && game->p2 != NULL) {
-    printf("Player 1 : %s [%d]\n", game->p1 , game->p1_fd);
-    printf("Player 2 : %s [%d]\n", game->p2 , game->p2_fd);
-  }
-  for (int i = 0; i < 8; i++)
-  {
-    for (int j = 0; j < 8; j++)
-    {
-      printf("%d ", game->grid[i][j]);
-    }
-    printf("\n");
-  }
-}
-*/
-
 int is_in_grid(int row, int col)
 {
   return col >= 0 && col < 8 && row >= 0 && row < 8;
@@ -743,12 +729,3 @@ void send_result(Game * game)
     send_output(loser);
   }
 }
-
-/*
-Jx << GAME:NEW:J1:J2 Receive new game request
-   JX >> GAME:NEW:ID:COLOR Sends the game info to both players
-Jx << GAME:ID:MOVE:COLOR:COORD Receive a move
-   JX >> GAME:MOVE:COLOR:COORDS:(WAIT|PLAY) Sends the result to both players, with a list of all the impacted moves
-   Jx >> GAME:WIN
-   Jx >> GAME:LOST
-*/
