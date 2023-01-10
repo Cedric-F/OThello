@@ -39,6 +39,7 @@ gboolean update_white_label(gpointer data);
 gboolean update_black_label(gpointer data);
 gboolean update_white_score(gpointer data);
 gboolean update_black_score(gpointer data);
+gboolean prompt_invite(gpointer data);
 gboolean update_title(gpointer data);
 gboolean count_score(gpointer data);
 gboolean update_move(gpointer data);
@@ -48,16 +49,18 @@ gboolean init_game(gpointer data);
 ============ STATIC USER TRIGGERED CALLBACK FUNCTIONS ============
 */
 
-static void server_connect(GtkWidget *b);
 static void player_move(GtkWidget *p_case);
+static void server_connect(GtkWidget *b);
+static void forfeit_game(GtkWidget *b);
 static void start_game(GtkWidget *b);
 static void clear_game(GtkWidget *b);
+static void spectate(GtkWidget *b);
 
 /*
 ============ UTILS ============
 */
 
-#define MAXDATASIZE 256
+#define MAXDATASIZE 512
 
 void coord_to_indexes(const gchar *coord, int *col, int *row);
 void indexes_to_coord(int col, int row, char * coord);
@@ -77,6 +80,7 @@ char *get_login(void);
 typedef struct State State;
 typedef struct Move Move;
 typedef struct Trash Trash;
+typedef struct PromptData PromptData;
 
 struct State {
   int * sockfd;
@@ -92,6 +96,12 @@ struct Move {
 struct Trash {
   GtkBuilder * p_builder;
   char data[24];
+};
+
+struct PromptData {
+  char from[32];
+  char to[32];
+  int socket_fd;
 };
 
 /*
@@ -131,14 +141,13 @@ void * t_read(void * state)
   char * play = g_strdup("Your turn to play");
   char * won_message = g_strdup("Fin de la partie.\n\nVous avez gagné!");
   char * lost_message = g_strdup("Fin de la partie.\n\nVous avez perdu!");
-
-  char * temp_buffer = (char *) malloc(sizeof(char) * MAXDATASIZE);
+  char * forfeit_won_message = g_strdup("Fin de la partie.\n\nVictoire par abandon!");
+  char * forfeit_lost_message = g_strdup("Fin de la partie.\n\nDéfaite par abandon!");
 
   while(1)
   {
     // Clearing the buffer for next input
     memset(buffer, 0, MAXDATASIZE);
-    //memset(temp_buffer, 0, MAXDATASIZE);
 
     // continuously reading from the server
     size = read(*(st->sockfd), buffer, MAXDATASIZE);
@@ -218,6 +227,14 @@ void * t_read(void * state)
                   *(st->play) = 1;
                 }
               }
+            } else if (strcmp(token, "INVITE") == 0)
+            {
+              token = strtok(NULL, "\0");
+              PromptData prompt;
+              sprintf(prompt.from, "%s", token);
+              sprintf(prompt.to, "%s", login);
+              prompt.socket_fd = sockfd;
+              g_main_context_invoke(main_context, (GSourceFunc) prompt_invite, &prompt);
             }
             // Command is a move update
             // Expected values : MOVE:Player:<coord-list>:Status
@@ -229,7 +246,7 @@ void * t_read(void * state)
               while((token = strtok(NULL, ":\0")) != NULL)
               {
                 // If the token is not a game status (WAIT / PLAY)
-                if (strcmp(token, "PLAY") && strcmp(token, "WAIT"))
+                if (strcmp(token, "PLAY") && strcmp(token, "WAIT") && strcmp(token, "NULL"))
                 {
                   // token is a set of coordinates <row>-<col>
 
@@ -276,6 +293,7 @@ void * t_read(void * state)
             // Game ends with the winning message
             else if (token != NULL && strcmp(token, "WON") == 0)
             {
+              game_id = -1;
               *(st->play) = 0;
               //affiche_fenetre_fin("Fin de la partie.\n\nVous avez gagné !");
               g_main_context_invoke(main_context, (GSourceFunc) affiche_fenetre_fin, won_message);
@@ -284,11 +302,71 @@ void * t_read(void * state)
             // Game ends with the losing message
             else if (token != NULL && strcmp(token, "LOST") == 0)
             {
+              game_id = -1;
               *(st->play) = 0;
               //affiche_fenetre_fin("Fin de la partie.\n\nVous avez perdu !");
               g_main_context_invoke(main_context, (GSourceFunc) affiche_fenetre_fin, lost_message);
               g_main_context_invoke(main_context, (GSourceFunc) enable_game_controls, p_builder);
             }
+            else if (token != NULL && strcmp(token, "WON_BY_FORFEIT") == 0)
+            {
+              game_id = -1;
+              *(st->play) = 0;
+              //affiche_fenetre_fin("Fin de la partie.\n\nVous avez perdu !");
+              g_main_context_invoke(main_context, (GSourceFunc) affiche_fenetre_fin, forfeit_won_message);
+              g_main_context_invoke(main_context, (GSourceFunc) enable_game_controls, p_builder);
+            }
+            else if (token != NULL && strcmp(token, "LOST_BY_FORFEIT") == 0)
+            {
+              game_id = -1;
+              *(st->play) = 0;
+              //affiche_fenetre_fin("Fin de la partie.\n\nVous avez perdu !");
+              g_main_context_invoke(main_context, (GSourceFunc) affiche_fenetre_fin, forfeit_lost_message);
+              g_main_context_invoke(main_context, (GSourceFunc) enable_game_controls, p_builder);
+            }
+            else if (token != NULL && strcmp(token, "SPECTATE_EOG") == 0)
+            {
+              char result[64];
+              token = strtok(NULL, "\0");
+              sprintf(result, "Fin de partie.\n\n%s !", token);
+              char * message = g_strdup(result);
+              game_id = -1;
+              g_main_context_invoke(main_context, (GSourceFunc) enable_game_controls, p_builder);
+              g_main_context_invoke(main_context, (GSourceFunc) affiche_fenetre_fin, message);
+            }
+          }
+          else if (strcmp(token, "SPECTATE") == 0)
+          {
+            char * p1;
+            char * p2;
+            char title[64];
+
+            for (int i = 0; i < 8; i++) {
+              for (int j = 0; j < 8; j++) {
+                damier[i][j] = -1;
+                Move * move = (Move *) malloc(sizeof(Move));
+                move->col = j;
+                move->row = i;
+                move->player = -1;
+                g_main_context_invoke(main_context, (GSourceFunc) update_move, move);
+              }
+            }
+
+            token = strtok(NULL, ":");
+            p1 = g_strdup(token);
+            
+            token = strtok(NULL, ":");
+            p2 = g_strdup(token);
+
+            token = strtok(NULL, "\0");
+            game_id = (int) strtol(token, NULL, 10);
+            *(st->play) = 0;
+
+            sprintf(title, "Spectating %s vs %s", p1, p2);
+
+            g_main_context_invoke(main_context, (GSourceFunc) update_title, title);
+            g_main_context_invoke(main_context, (GSourceFunc) update_black_label, p1);
+            g_main_context_invoke(main_context, (GSourceFunc) update_white_label, p2);
           }
         }
       }
@@ -300,6 +378,37 @@ void * t_read(void * state)
     }
   }
   exit(EXIT_SUCCESS);
+}
+
+gboolean prompt_invite(gpointer data)
+{
+  PromptData *promptData = (PromptData *) data;
+  char title[64];
+  sprintf(title, "%s wants to play with you!", promptData->from);
+
+  // Create a dialog with yes/no buttons
+  GtkWidget *dialog = gtk_message_dialog_new(
+      NULL,
+      GTK_DIALOG_MODAL,
+      GTK_MESSAGE_QUESTION,
+      GTK_BUTTONS_YES_NO,
+      title);
+
+  // Show the dialog and wait for a response
+  int response = gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+
+  char message[128];
+  // Send the response to the server
+  if (response == GTK_RESPONSE_YES) {
+    sprintf(message, "GAME:NEW:%s:%s", promptData->from, promptData->to);
+    send(promptData->socket_fd, message, sizeof(message), 0);
+  } else {
+    sprintf(message, "DECLINE");
+    send(promptData->socket_fd, message, sizeof(message), 0);
+  }
+  memset(message, 0, sizeof(message));
+  return FALSE;
 }
 
 gboolean update_title(gpointer data)
@@ -331,6 +440,10 @@ gboolean update_move(gpointer data)
   else if(player == 0)
   { // image pion noir
     gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_noir.png");
+  }
+  else if(player == -1)
+  {
+    gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_def.png");
   }
   free(m);
   return FALSE;
@@ -475,17 +588,20 @@ void signup(char * login)
 
 void disable_server_connect(void)
 {
-  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "button_start"), TRUE);
   gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "button_connect"), FALSE);
-  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "entry_adr"), FALSE);
-  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "entry_port"), FALSE);
+  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "button_start"), TRUE);
   gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "entry_login"), FALSE);
+  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "entry_port"), FALSE);
+  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "entry_adr"), FALSE);
+  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "spectate"), TRUE);
 }
 
 gboolean disable_game_controls(gpointer data)
 {
   GtkBuilder * p_builder = (GtkBuilder *) data;
   gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "button_start"), FALSE);
+  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "spectate"), FALSE);
+  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "forfeit"), TRUE);
   gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "clear"), FALSE);
   return FALSE;
 }
@@ -494,6 +610,8 @@ gboolean enable_game_controls(gpointer data)
 {
   GtkBuilder * p_builder = (GtkBuilder *) data;
   gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "button_start"), TRUE);
+  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "spectate"), TRUE);
+  gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "forfeit"), FALSE);
   gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "clear"), TRUE);
   return FALSE;
 }
@@ -521,12 +639,12 @@ gboolean init_game(gpointer data)
   damier[4][4] = 1;
   
   // Initialisation des scores et des joueurs
-  if(couleur==1)
+  if(couleur == 1)
   {
     update_white_label(text_you);
     update_black_label(text_opponent);
   }
-  else
+  else if(couleur == 0)
   {
     update_black_label(text_you);
     update_white_label(text_opponent);
@@ -561,7 +679,6 @@ gboolean affich_joueur_buffer(gpointer data)
   const gchar *joueur;
   
   joueur=g_strconcat(login, "\n", NULL);
-  printf("User %s\n", joueur);
   gtk_text_buffer_insert_at_cursor(GTK_TEXT_BUFFER(gtk_text_view_get_buffer(GTK_TEXT_VIEW(gtk_builder_get_object(p_builder, "textview_joueurs")))), joueur, strlen(joueur));
   free(data);
   return FALSE;
@@ -569,7 +686,6 @@ gboolean affich_joueur_buffer(gpointer data)
 
 gboolean count_score(gpointer data)
 {
-  // gdk_threads_enter();
   int (*damier)[8] = (int(*)[8])data;
   int nb_p1 = 0;
   int nb_p2 = 0;
@@ -578,12 +694,13 @@ gboolean count_score(gpointer data)
   {
     for (int j = 0; j < 8; j++)
     {
-      printf("%d ", damier[i][j]);
+      //printf("%d ", damier[i][j]);
       if (damier[i][j] == 1) nb_p1++;
       else if (damier[i][j] == 0) nb_p2++;
     }
-    printf("\n");
+    //printf("\n");
   }
+  //printf("update score\n");
   update_white_score(&nb_p1);
   update_black_score(&nb_p2);
   return FALSE;
@@ -647,24 +764,48 @@ static void server_connect(GtkWidget *b)
 
 static void start_game(GtkWidget *b)
 {
+  printf("start\n");
   char message[32];
   int n;
-  if(game_id==-1)
+  if(game_id < 0)
   {
     // Recuperation  adresse et port adversaire au format chaines caracteres
     target_name=get_target();
   
-    sprintf(message, "GAME:NEW:%s:%s", login, target_name);
+    sprintf(message, "GAME:INVITE:%s", target_name);
     n = send(sockfd, message, sizeof(message), 0);
-    printf("\n>> [%d bytes] : %s\n", n, message);
+    printf(">> [%d bytes] : %s\n", n, message);
+    memset(message, 0, sizeof(message));
   }
+}
+
+static void spectate(GtkWidget *b)
+{
+  char message[32];
+  int n;
+  if (game_id == -1)
+  {
+    target_name = get_target();
+    sprintf(message, "GAME:SPECTATE:%s", target_name);
+  }
+  else
+  {
+    sprintf(message, "GAME:UNSPECTATE:%d", game_id);
+    game_id = -1;
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j < 8; j++) {
+        damier[i][j] = -1;
+        change_img_case(i, j, -1);
+      }
+    }
+  }
+  n = send(sockfd, message, sizeof(message), 0);
+  printf(">> [%d bytes] : %s\n", n, message);
+  memset(message, 0, sizeof(message));
 }
 
 static void clear_game(GtkWidget *b)
 {
-  printf("clear game\n");
-  if (game_id == -1) return;
-  printf("clear game\n");
   game_id = -1;
   target_name = NULL;
   for (int i = 0; i < 8; i++)
@@ -674,6 +815,27 @@ static void clear_game(GtkWidget *b)
         change_img_case(i, j, -1);
       }
     }
+}
+
+static void forfeit_game(GtkWidget *b)
+{
+  if (game_id == -1) return;
+  char message[32];
+  int n;
+  game_id = -1;
+  target_name = NULL;
+  for (int i = 0; i < 8; i++) {
+    for (int j = 0; j < 8; j++) {
+      if (damier[i][j] != -1) {
+        damier[i][j] = -1;
+        change_img_case(i, j, -1);
+      }
+    }
+  }
+
+  sprintf(message, "%s", "GAME:FORFEIT");
+  n = send(sockfd, message, sizeof(message), 0);
+  printf("\n>> [%d bytes] : %s\n", n, message);
 }
 
 int main (int argc, char ** argv)
@@ -709,10 +871,13 @@ int main (int argc, char ** argv)
         }
       }
       gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "button_start"), FALSE);
-      gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "clear"), TRUE);
+      gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "spectate"), FALSE);
+      gtk_widget_set_sensitive((GtkWidget *) gtk_builder_get_object (p_builder, "forfeit"), FALSE);
 
       g_signal_connect(gtk_builder_get_object(p_builder, "button_connect"), "clicked", G_CALLBACK(server_connect), NULL);
       g_signal_connect(gtk_builder_get_object(p_builder, "button_start"), "clicked", G_CALLBACK(start_game), NULL);
+      g_signal_connect(gtk_builder_get_object(p_builder, "spectate"), "clicked", G_CALLBACK(spectate), NULL);
+      g_signal_connect(gtk_builder_get_object(p_builder, "forfeit"), "clicked", G_CALLBACK(forfeit_game), NULL);
       g_signal_connect(gtk_builder_get_object(p_builder, "clear"), "clicked", G_CALLBACK(clear_game), NULL);
 
       /* Gestion clic bouton fermeture fenetre */

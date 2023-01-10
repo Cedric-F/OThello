@@ -1810,16 +1810,14 @@
                             </child>
                             <child>
                               <object class="GtkButton" id="button_start">
-                                <property name="label" translatable="yes">Start a game</property>
+                                <property name="label" translatable="yes">Invite</property>
                                 <property name="use_action_appearance">False</property>
-                                <property name="width_request">119</property>
-                                <property name="height_request">31</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">True</property>
                               </object>
                               <packing>
-                                <property name="x">85</property>
+                                <property name="x">118</property>
                                 <property name="y">75</property>
                               </packing>
                             </child>
@@ -1837,8 +1835,34 @@
                                 <property name="relief">half</property>
                               </object>
                               <packing>
-                                <property name="x">69</property>
-                                <property name="y">132</property>
+                                <property name="x">118</property>
+                                <property name="y">136</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkButton" id="forfeit">
+                                <property name="label" translatable="yes">Forfeit</property>
+                                <property name="name">forfeit</property>
+                                <property name="width_request">100</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">True</property>
+                              </object>
+                              <packing>
+                                <property name="x">11</property>
+                                <property name="y">136</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkButton" id="spectate">
+                                <property name="label" translatable="yes">Spectate</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">True</property>
+                              </object>
+                              <packing>
+                                <property name="x">11</property>
+                                <property name="y">76</property>
                               </packing>
                             </child>
                           </object>
