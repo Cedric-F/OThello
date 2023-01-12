@@ -127,6 +127,8 @@ GError      *  p_err       = NULL;
 
 // Thread de lecture
 
+gboolean heart();
+
 void * t_read(void * state)
 {
   // We'll need the main loop context for thread-safe updates of our interface
@@ -145,6 +147,8 @@ void * t_read(void * state)
   char * lost_message = g_strdup("Fin de la partie.\n\nVous avez perdu!");
   char * forfeit_won_message = g_strdup("Fin de la partie.\n\nVictoire par abandon!");
   char * forfeit_lost_message = g_strdup("Fin de la partie.\n\nDéfaite par abandon!");
+  
+  g_main_context_invoke(main_context, (GSourceFunc) heart, NULL);
 
   while(1)
   {
@@ -533,7 +537,12 @@ void change_img_case(int col, int row, int color)
   else if(color == 0)
   { // image pion noir
     gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_noir.png");
-  } else gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_def.png");
+  }
+  else if (color == 2)
+  {
+    gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_rouge.png");
+  }
+  else gtk_image_set_from_file(GTK_IMAGE(gtk_builder_get_object(p_builder, coord)), "UI_Glade/case_def.png");
 }
 
 /* Fonction retournant texte du champs adresse du serveur de l'interface graphique */
@@ -878,6 +887,43 @@ static void forfeit_game(GtkWidget *b)
   printf("\n>> [%d bytes] : %s\n", n, message);
 }
 
+gboolean heart()
+{
+  printf("hello\n");
+  for (int i = 0; i < 8; i++)
+    for (int j = 0; j < 8; j++) {
+      damier[i][j] = 2;
+    }
+
+  damier[0][0] = -1;
+  damier[1][0] = -1;
+  damier[3][0] = -1;
+  damier[4][0] = -1;
+  damier[6][0] = -1;
+  damier[7][0] = -1;
+  damier[0][1] = -1;
+  damier[7][1] = -1;
+  damier[0][5] = -1;
+  damier[7][5] = -1;
+  damier[0][6] = -1;
+  damier[1][6] = -1;
+  damier[6][6] = -1;
+  damier[7][6] = -1;
+  damier[0][7] = -1;
+  damier[1][7] = -1;
+  damier[2][7] = -1;
+  damier[5][7] = -1;
+  damier[6][7] = -1;
+  damier[7][7] = -1;
+
+  for (int i = 0; i < 8; i++) {
+    for (int j = 0; j < 8; j++) {
+      change_img_case(i, j, damier[i][j]);
+    }
+  }
+  return FALSE;
+}
+
 int main (int argc, char ** argv)
 {
   state = (State *) malloc(sizeof(State));   
@@ -922,7 +968,6 @@ int main (int argc, char ** argv)
 
       /* Gestion clic bouton fermeture fenetre */
       g_signal_connect_swapped(G_OBJECT(p_win), "destroy", G_CALLBACK(gtk_main_quit), NULL);
-
       gtk_widget_show_all(p_win);
       gtk_main();
     }
