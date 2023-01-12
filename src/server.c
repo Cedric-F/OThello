@@ -57,6 +57,7 @@ struct Client {
   int socket;
   char * alias;
   int busy;
+  Spectator * spec;
   Client * next;
 };
 
@@ -74,6 +75,7 @@ Spectator * add_spectator(Game * game, Client * client)
   Spectator * spectator = (Spectator *) malloc(sizeof(Spectator));
 
   spectator->client = client;
+  client->spec = spectator;
   spectator->game = game;
   spectator->next = game->spectators;
   game->spectators = spectator;
@@ -81,27 +83,7 @@ Spectator * add_spectator(Game * game, Client * client)
 
 void remove_spectator(Game * game, Client * client)
 {
-  /*Spectator * prev = NULL;
-  Spectator * current = game->spectators;
-  while (current != NULL)
-  {
-    if (current->client == client)
-    {
-      if (prev == NULL)
-      {
-        game->spectators = current->next;
-      }
-      else
-      {
-        prev->next = current->next;
-      }
-      free(current);
-      return;
-    }
-    prev = current;
-    current = current->next;
-  }
-  return;*/
+  client->spec = NULL;
   Spectator * tmp = NULL;
   if ((game->spectators)->client == client)
   {
@@ -132,6 +114,7 @@ Client * add_client(int socket)
   Client * client = (Client *) malloc(sizeof(Client));
   Client * current = client_list;
   client->socket = socket;
+  client->spec = NULL;
   client->busy = 0;
   client->alias = (char *) malloc(sizeof(char) * 24);
   client->next = client_list;
@@ -447,6 +430,10 @@ int main(int argc, char * argv[])
 
           send_forfeit(current);
 
+          int is_spec = !(current->spec == NULL);
+
+          if (is_spec) remove_spectator(current->spec->game, current);
+
           FD_CLR(sd, &readfds);
           current = current->next;
           remove_client(sd);
@@ -523,12 +510,11 @@ void send_spec_confirm(Client * to, Client * p1, Client * p2, int id)
 
 void send_moves_to_spec(Game * game)
 {
+  if (game->spectators == NULL) return;
   char bfr[256] = {0};
   char piece[5];
-  printf("loop\n");
   for(int i = 0; i < 8; i++) {
     for (int j = 0; j < 8; j++) {
-      printf("%d-%d = %d\n", i, j, game->grid[i][j]);
       if (game->grid[i][j] == (game->p1)->socket) {
         snprintf(piece, sizeof(piece), "%d-%d:", i, j);
         strcat(bfr, piece);
@@ -599,8 +585,11 @@ void parse_spectate(Client * from)
 
 void parse_unspectate(Client * from, int id)
 {
+  if (from->spec == NULL) return;
   Game * game = get_game_from_id(id);
   remove_spectator(game, from);
+  sprintf(output, "UNSPECTATE");
+  send_output(from->socket);
 }
 
 void parse_invite(Client * from)
@@ -661,6 +650,15 @@ void parse_new_game()
       return;
     }
     current = current->next;
+  }
+
+  if (client1->spec != NULL)
+  {
+    parse_unspectate(client1, client1->spec->game->id);
+  }
+  if (client2->spec != NULL)
+  {
+    parse_unspectate(client2, client2->spec->game->id);
   }
 
   current = create_game(client1, client2);

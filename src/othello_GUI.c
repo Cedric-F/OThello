@@ -39,6 +39,8 @@ gboolean update_white_label(gpointer data);
 gboolean update_black_label(gpointer data);
 gboolean update_white_score(gpointer data);
 gboolean update_black_score(gpointer data);
+gboolean update_spec_button(gpointer data);
+gboolean reset_interface(gpointer data);
 gboolean prompt_invite(gpointer data);
 gboolean update_title(gpointer data);
 gboolean count_score(gpointer data);
@@ -79,7 +81,7 @@ char *get_login(void);
 
 typedef struct State State;
 typedef struct Move Move;
-typedef struct Trash Trash;
+typedef struct G_Data G_Data;
 typedef struct PromptData PromptData;
 
 struct State {
@@ -93,7 +95,7 @@ struct Move {
   int player;
 };
 
-struct Trash {
+struct G_Data {
   GtkBuilder * p_builder;
   char data[24];
 };
@@ -173,7 +175,7 @@ void * t_read(void * state)
           token = strtok(NULL, "\n");
           if (token != NULL)
           {
-            Trash * data = (Trash *) malloc(sizeof(Trash));
+            G_Data * data = (G_Data *) malloc(sizeof(G_Data));
             data->p_builder = p_builder;
             sprintf(data->data, "%s", token);
             g_main_context_invoke(main_context, (GSourceFunc) affich_joueur_buffer, data);
@@ -335,6 +337,10 @@ void * t_read(void * state)
               g_main_context_invoke(main_context, (GSourceFunc) affiche_fenetre_fin, message);
             }
           }
+          else if (strcmp(token, "UNSPECTATE") == 0)
+          {
+            g_main_context_invoke(main_context, (GSourceFunc) reset_interface, p_builder);
+          }
           else if (strcmp(token, "SPECTATE") == 0)
           {
             char * p1;
@@ -364,9 +370,14 @@ void * t_read(void * state)
 
             sprintf(title, "Spectating %s vs %s", p1, p2);
 
+            G_Data * data = (G_Data *) malloc(sizeof(G_Data));
+            data->p_builder = p_builder;
+            sprintf(data->data, "Unspectate");
+
             g_main_context_invoke(main_context, (GSourceFunc) update_title, title);
             g_main_context_invoke(main_context, (GSourceFunc) update_black_label, p1);
             g_main_context_invoke(main_context, (GSourceFunc) update_white_label, p2);
+            g_main_context_invoke(main_context, (GSourceFunc) update_spec_button, data);
           }
         }
       }
@@ -577,6 +588,34 @@ gboolean affiche_fenetre_fin(gpointer data)
   return FALSE;
 }
 
+gboolean update_spec_button(gpointer data)
+{
+  G_Data * gdata = (G_Data *) data;
+  GtkBuilder * p_builder = (GtkBuilder *) gdata->p_builder;
+  GObject * button = gtk_builder_get_object(p_builder, "spectate");
+  if (button != NULL && GTK_IS_BUTTON(button)) {
+    char * unspectate = g_strdup(gdata->data);
+    gtk_button_set_label(GTK_BUTTON(button), unspectate);
+  }
+  free(gdata);
+  return FALSE;
+}
+
+gboolean reset_interface(gpointer data)
+{
+  GtkBuilder * p_builder = (GtkBuilder *) data;
+  char * spectate = g_strdup("Spectate");
+  char * white = g_strdup("Player 1");
+  char * black = g_strdup("Player 2");
+  char * title = g_strdup("Projet Othello");
+  update_black_label(black);
+  update_white_label(white);
+  update_title(title);
+  gtk_button_set_label((GtkButton *) gtk_builder_get_object(p_builder, "spectate"), spectate);
+  free(spectate);
+  return FALSE;
+}
+
 void signup(char * login)
 {
   int n;
@@ -673,7 +712,7 @@ gboolean reset_liste_joueurs(gpointer data)
 /* Fonction permettant d'ajouter un joueur dans la liste des joueurs sur l'interface graphique */
 gboolean affich_joueur_buffer(gpointer data)
 {
-  Trash * arg = (Trash *) data;
+  G_Data * arg = (G_Data *) data;
   char * login = arg->data;
   GtkBuilder * p_builder = arg->p_builder;
   const gchar *joueur;
@@ -815,6 +854,7 @@ static void clear_game(GtkWidget *b)
         change_img_case(i, j, -1);
       }
     }
+
 }
 
 static void forfeit_game(GtkWidget *b)

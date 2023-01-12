@@ -1817,8 +1817,8 @@
                                 <property name="receives_default">True</property>
                               </object>
                               <packing>
-                                <property name="x">118</property>
-                                <property name="y">75</property>
+                                <property name="x">143</property>
+                                <property name="y">76</property>
                               </packing>
                             </child>
                             <child>

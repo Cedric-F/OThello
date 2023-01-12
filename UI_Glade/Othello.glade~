@@ -1810,17 +1810,15 @@
                             </child>
                             <child>
                               <object class="GtkButton" id="button_start">
-                                <property name="label" translatable="yes">Start a game</property>
+                                <property name="label" translatable="yes">Invite</property>
                                 <property name="use_action_appearance">False</property>
-                                <property name="width_request">128</property>
-                                <property name="height_request">31</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">True</property>
                               </object>
                               <packing>
-                                <property name="x">85</property>
-                                <property name="y">75</property>
+                                <property name="x">140</property>
+                                <property name="y">76</property>
                               </packing>
                             </child>
                             <child>
@@ -1853,6 +1851,18 @@
                               <packing>
                                 <property name="x">11</property>
                                 <property name="y">136</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkButton" id="spectate">
+                                <property name="label" translatable="yes">Spectate</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">True</property>
+                              </object>
+                              <packing>
+                                <property name="x">11</property>
+                                <property name="y">76</property>
                               </packing>
                             </child>
                           </object>
